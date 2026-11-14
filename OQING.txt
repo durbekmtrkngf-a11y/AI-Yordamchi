@@ -1,0 +1,4 @@
+POYABZAL SEXI - telefon uchun (qurish kerak emas)
+1) config.js ni oching, 2 qiymatni Supabase'dan oling (Project Settings > API)
+2) Barcha fayllarni GitHub'ga yuklang va GitHub Pages'ni yoqing
+3) Hosting havolasini telefonda oching > "Ilovani o'rnatish"
