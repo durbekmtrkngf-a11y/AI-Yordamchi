@@ -1,37 +1,9 @@
-import { h, render, createContext } from 'preact'
-import { useState, useEffect, useRef, useCallback, useContext } from 'preact/hooks'
-import htm from 'htm'
-import { supabase, toEmail, friendlyError, toCyr } from './lib.js'
-
-const html = htm.bind(h)
-
-/* ===================== Til (lotin / kirill) ===================== */
-const LangCtx = createContext({ lang: 'lat', setLang: () => {}, t: (s) => s })
-const useT = () => useContext(LangCtx)
-
-function LangProvider({ children }) {
-  const [lang, setL] = useState(localStorage.getItem('lang') || 'lat')
-  const setLang = (l) => { localStorage.setItem('lang', l); setL(l) }
-  const t = (s) => (lang === 'cyr' ? toCyr(s) : s)
-  return html`<${LangCtx.Provider} value=${{ lang, setLang, t }}>${children}<//>`
-}
-
-function LangSwitch() {
-  const { lang, setLang } = useT()
-  return html`<button class="lang" onClick=${() => setLang(lang === 'lat' ? 'cyr' : 'lat')}>
-    ${lang === 'lat' ? 'Ўзбекча' : 'O‘zbekcha'}
-  </button>`
-}
-
-/* ===================== Parol maydoni (ko'z belgisi) ===================== */
-function PasswordInput({ value, onChange, placeholder }) {
-  const [show, setShow] = useState(false)
-  return html`<div class="pw">
-    <input type=${show ? 'text' : 'password'} value=${value} placeholder=${placeholder}
-      onInput=${(e) => onChange(e.target.value)} />
-    <button type="button" class="eye" onClick=${() => setShow(!show)}>${show ? '🙈' : '👁'}</button>
-  </div>`
-}
+import { h, render } from 'preact'
+import { useState, useEffect, useRef, useCallback } from 'preact/hooks'
+import { supabase, toEmail, friendlyError } from './lib.js'
+import { html, useT, LangProvider, LangSwitch, PasswordInput } from './ui.js'
+import { BossApp } from './boss.js'
+import { WorkerApp } from './worker.js'
 
 /* ===================== Kirish / Ro'yxatdan o'tish / Tiklash ===================== */
 const WORKER_TYPES = [['zakatofkachi', 'Zakatofkachi'], ['kosib', 'Kosib'], ['kroychik', 'Kroychik'], ['pardozchi', 'Pardozchi']]
@@ -161,68 +133,6 @@ function NewPassword({ onDone }) {
   </div>`
 }
 
-/* ===================== Boshliq va ishchi bosh sahifalari (1-bosqich) ===================== */
-function BossHome({ membership, onLogout }) {
-  const { t } = useT()
-  const [pending, setPending] = useState([])
-  const [err, setErr] = useState('')
-  const [copied, setCopied] = useState(false)
-  const code = (membership.companies && membership.companies.invite_code) || ''
-  const link = `${location.origin}${location.pathname}?kod=${code}`
-
-  const load = useCallback(async () => {
-    const { data, error } = await supabase.rpc('list_pending_members', { p_company: membership.company_id })
-    if (error) return setErr(friendlyError(error.message))
-    setPending(data || [])
-  }, [membership.company_id])
-  useEffect(() => { load() }, [load])
-
-  async function decide(id, approve) {
-    if (!approve && !confirm(t('Rad etilsinmi?'))) return
-    const { error } = await supabase.rpc('decide_member', { p_membership: id, p_approve: approve })
-    if (error) return setErr(friendlyError(error.message))
-    load()
-  }
-  async function copy() {
-    try { await navigator.clipboard.writeText(link) } catch (_) {}
-    setCopied(true); setTimeout(() => setCopied(false), 1500)
-  }
-
-  return html`<div class="screen">
-    <div class="topbar"><${LangSwitch} /><button onClick=${onLogout}>${t('Chiqish')}</button></div>
-    <h1 class="brand">${membership.companies && membership.companies.name}</h1>
-    <div class="card">
-      <div class="label">${t('Taklif kodi (ishchilarga bering)')}</div>
-      <div class="code">${code}</div>
-      <button onClick=${copy}>${copied ? t('Nusxalandi') : t('Taklif havolasini nusxalash')}</button>
-    </div>
-    <h2>${t('Kutayotgan ishchilar')}</h2>
-    ${err && html`<div class="msg err">${err}</div>`}
-    ${pending.length === 0 && html`<p class="muted">${t('Hozircha so‘rov yo‘q')}</p>`}
-    ${pending.map((p) => html`<div class="card row">
-      <div><b>${p.full_name}</b><br /><span class="muted">${p.worker_type} · ${p.phone}</span></div>
-      <div class="btns">
-        <button class="primary" onClick=${() => decide(p.membership_id, true)}>✓</button>
-        <button class="danger" onClick=${() => decide(p.membership_id, false)}>✕</button>
-      </div>
-    </div>`)}
-    <p class="muted">${t('Boshqa bo‘limlar (ishchilar, modellar, xarajatlar...) keyingi bosqichlarda qo‘shiladi.')}</p>
-  </div>`
-}
-
-function WorkerHome({ membership, onLogout }) {
-  const { t } = useT()
-  return html`<div class="screen">
-    <div class="topbar"><${LangSwitch} /><button onClick=${onLogout}>${t('Chiqish')}</button></div>
-    <h1 class="brand">${membership.companies && membership.companies.name}</h1>
-    <div class="card">
-      <div class="label">${t('Kasbingiz')}</div>
-      <div class="code">${membership.worker_types && membership.worker_types.name}</div>
-    </div>
-    <p class="muted">${t('Ish daftari va maosh bo‘limlari keyingi bosqichlarda qo‘shiladi.')}</p>
-  </div>`
-}
-
 /* ===================== Gate: foydalanuvchi holatiga qarab oyna ===================== */
 function Gate({ session }) {
   const { t } = useT()
@@ -277,8 +187,8 @@ function Gate({ session }) {
     <button onClick=${logout}>${t('Chiqish')}</button>
   </div>`
   return m.role === 'boss'
-    ? html`<${BossHome} membership=${m} onLogout=${logout} />`
-    : html`<${WorkerHome} membership=${m} onLogout=${logout} />`
+    ? html`<${BossApp} membership=${m} onLogout=${logout} />`
+    : html`<${WorkerApp} membership=${m} onLogout=${logout} />`
 }
 
 /* ===================== Asosiy ilova ===================== */

@@ -1,6 +1,6 @@
 // Oddiy xizmat ishchisi: avval internetdan oladi, internet bo‘lmasa saqlangan nusxani ko‘rsatadi.
 // (Ma‘lumotlarni offline saqlash 8-bosqichda qo‘shiladi.)
-const CACHE = "seh-v1";
+const CACHE = "seh-v2";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", (e) => {
