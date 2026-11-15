@@ -122,3 +122,13 @@ table.grid-t { border-collapse:separate; border-spacing:0; width:max-content; mi
 .kasb-h span { display:flex; align-items:center; gap:8px; }
 .datebar { display:flex; gap:8px; align-items:center; margin-bottom:12px; } .datebar input { flex:1; padding:11px 12px; }
 .dot { width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--green); }
+
+/* ---- daftar: katak ichiga yozish ---- */
+.cellin { width:86px; height:62px; border-radius:16px; border:1px solid var(--line); background:#f4f6fb; text-align:center; font-size:26px; font-weight:800; color:var(--navy); padding:0; font-variant-numeric:tabular-nums; }
+.cellin:focus { outline:2px solid #16a34a; background:#fff; }
+.cellin.pend { background:var(--amber-soft); border-color:#fcd34d; } .cellin.ret { background:var(--red-soft); border-color:#fca5a5; }
+.cellin[readonly] { background:#e8f6ee; color:#15803d; }
+.grid-t.cells td.cin { padding:8px 6px; } .grid-t td.dcol { font-size:17px; font-weight:800; cursor:pointer; }
+.grid-t tr.today td, .grid-t tr.today td:first-child { background:#dff5ec; }
+.grid-t td.tapc { cursor:pointer; } .grid-t tfoot td { font-weight:800; background:#f1f5f9; border-top:2px solid var(--line); }
+.fform { display:flex; flex-direction:column; gap:12px; } .rbtns { display:flex; gap:6px; align-items:center; }

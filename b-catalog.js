@@ -14,14 +14,17 @@ export function ModelsPage({ go }) {
   const [sheet, setSheet] = useState(null)
   const types = sortedTypes(D)
   const prices = C.live(D.model_prices)
+  async function remove(mm) {
+    if (await ask(t('Model o‘chirilsinmi? Eski ishlar va hisob-kitoblar saqlanadi.'), { danger: true })) { S.archive('models', mm.id); toast(t('Model o‘chirildi')) }
+  }
   const list = (D.models || []).filter((m) => (filter === 'arxiv' ? !!m.deleted_at : !m.deleted_at && (filter === 'all' || m.is_active === (filter === 'active'))))
     .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
   return html`<${Page} title=${t('Modellar')} sub=${`${list.length} ${t('ta')}`} right=${html`<button class="icon-btn light" onClick=${() => setSheet({})}><${Icon} name="plus" /></button>`}>
-    <${Chips} value=${filter} onChange=${setFilter} items=${[['active', t('Faol')], ['inactive', t('Vaqtincha o‘chirilgan')], ['arxiv', t('Arxiv')]]} />
+    <${Chips} value=${filter} onChange=${setFilter} items=${[['active', t('Faol')], ['inactive', t('Vaqtincha o‘chirilgan')], ['arxiv', t('O‘chirilganlar')]]} />
     ${list.length === 0 && html`<${Empty} icon="shoe" text=${t('Hozircha model yo‘q. + tugmasi bilan qo‘shing.')} />`}
     <div class="list">${list.map((m) => html`<${Row} icon="shoe" title=${`${m.code}${m.name ? ' · ' + m.name : ''}`}
       sub=${types.map((ty) => { const p = C.priceFor(prices, m.id, ty.id, today); return `${t(ty.name)}: ${p === null ? '—' : C.fmt(p)}` }).join(' · ')}
-      right=${m.deleted_at ? html`<span class="pill gray">${t('Arxiv')}</span>` : !m.is_active ? html`<span class="pill amber">${t('O‘chirilgan')}</span>` : null}
+      right=${html`<span class="rbtns">${m.deleted_at ? html`<span class="pill gray">${t('O‘chirilgan')}</span>` : html`${!m.is_active ? html`<span class="pill amber">${t('Nofaol')}</span>` : null}<button class="btn sm ghost" onClick=${(ev) => { ev.stopPropagation(); setSheet(m) }}><${Icon} name="edit" size=${16} /></button><button class="btn sm ghost" onClick=${(ev) => { ev.stopPropagation(); remove(m) }}><${Icon} name="archive" size=${16} /></button>`}</span>`}
       onClick=${() => setSheet(m)} />`)}</div>
     ${sheet && html`<${ModelSheet} model=${sheet.id ? sheet : null} onClose=${() => setSheet(null)} />`}
   <//>`
@@ -69,21 +72,23 @@ function ModelSheet({ model, onClose }) {
     toast(t('Saqlandi')); setBusy(false); onClose()
   }
   async function archive() {
-    if (await ask(t('Model arxivlansinmi? Eski ishlar va hisob-kitoblar saqlanadi.'), { danger: true })) { S.archive('models', model.id); onClose() }
+    if (await ask(t('Model o‘chirilsinmi? Eski ishlar va hisob-kitoblar saqlanadi.'), { danger: true })) { S.archive('models', model.id); onClose() }
   }
   const hist = model ? allPrices.filter((p) => p.model_id === model.id).sort((a, b) => (a.valid_from < b.valid_from ? 1 : -1)) : []
   return html`<${Sheet} title=${model ? t('Modelni tahrirlash') : t('Yangi model')} onClose=${onClose}>
-    <div class="two"><${Field} label=${t('Model kodi')}><input value=${code} onInput=${(e) => setCode(e.target.value)} placeholder="01" /><//>
-      <${Field} label=${t('Model nomi')}><input value=${name} onInput=${(e) => setName(e.target.value)} /><//></div>
-    <${Field} label=${t('Izoh')}><input value=${note} onInput=${(e) => setNote(e.target.value)} /><//>
+    <form class="fform" onSubmit=${(ev) => { ev.preventDefault(); if (!busy) save() }}>
+    <div class="two"><${Field} label=${t('Model kodi')}><input enterkeyhint="go" value=${code} onInput=${(e) => setCode(e.target.value)} placeholder="01" /><//>
+      <${Field} label=${t('Model nomi')}><input enterkeyhint="go" value=${name} onInput=${(e) => setName(e.target.value)} /><//></div>
+    <${Field} label=${t('Izoh')}><input enterkeyhint="go" value=${note} onInput=${(e) => setNote(e.target.value)} /><//>
     <${Switch} on=${active} onChange=${setActive} label=${t('Faol')} />
     <b>${t('Ish haqi narxi (bir juft uchun, so‘m)')}</b>
     ${types.map((ty) => html`<${Field} label=${t(ty.name)}><${MoneyInput} value=${pr[ty.id]} onChange=${(v) => setPr({ ...pr, [ty.id]: v })} /><//>`)}
     ${hist.length > 0 && html`<details><summary class="muted">${t('Narxlar tarixi')}</summary>
       ${hist.map((p) => html`<div class="kv small"><span>${t((types.find((x) => x.id === p.worker_type_id) || {}).name || '')}</span><span>${C.fmt(p.price)} · ${p.valid_from === '2000-01-01' ? t('boshidan') : fmtDate(p.valid_from)}</span></div>`)}</details>`}
-    <button class="btn primary block" disabled=${busy} onClick=${save}>${busy ? t('Kuting...') : t('Saqlash')}</button>
-    ${model && !model.deleted_at && html`<button class="btn danger block" onClick=${archive}><${Icon} name="archive" size=${18} />${t('Arxivlash')}</button>`}
-    ${model && model.deleted_at && html`<button class="btn block" onClick=${() => { S.restore('models', model.id); onClose() }}>${t('Arxivdan qaytarish')}</button>`}
+    <button type="submit" class="btn primary block" disabled=${busy}>${busy ? t('Kuting...') : t('Saqlash')}</button>
+    ${model && !model.deleted_at && html`<button type="button" class="btn danger block" onClick=${archive}><${Icon} name="archive" size=${18} />${t('O‘chirish')}</button>`}
+    ${model && model.deleted_at && html`<button type="button" class="btn block" onClick=${() => { S.restore('models', model.id); onClose() }}>${t('Qaytarish')}</button>`}
+    </form>
   <//>`
 }
 

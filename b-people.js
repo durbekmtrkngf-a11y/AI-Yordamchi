@@ -41,6 +41,7 @@ export function WorkersPage({ go, membership }) {
         <div class="btns"><button class="btn primary sm" onClick=${() => decide(p.membership_id, true)}><${Icon} name="check" size=${16} />${t('Qabul qilish')}</button>
           <button class="btn danger sm" onClick=${() => decide(p.membership_id, false)}><${Icon} name="x" size=${16} />${t('Rad etish')}</button></div>
       </div>`)}</div>`}
+    ${C.live(D.work_entries).filter((e) => e.status === 'pending').length > 0 && html`<div class="list" style="margin-bottom:12px"><${Row} icon="check" tone="amber" title=${t('Tasdiq kutayotgan ishlar')} right=${C.live(D.work_entries).filter((e) => e.status === 'pending').length} onClick=${() => go('tasdiq')} /></div>`}
     <div class="search"><${Icon} name="search" size=${18} /><input placeholder=${t('Ism bo‘yicha qidirish')} value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
     <${Chips} value=${filter} onChange=${setFilter}
       items=${[['all', t('Hammasi')], ...types.map((x) => [x.id, t(x.name)]), ['arxiv', t('Arxiv')]]} />
@@ -59,6 +60,7 @@ export function WorkerPage({ arg, go }) {
   const S = useStore(); const D = S.all(); const today = todayStr()
   const [from, setFrom] = useState(C.monthStart(today)); const [to, setTo] = useState(today)
   const [sheet, setSheet] = useState(null)
+  const [showCalc, setShowCalc] = useState(false); const [edit, setEdit] = useState(null)
   const l = C.workerLedger(D, arg, from, to)
   if (!l) return html`<${Page} title=${t('Ishchi')} back=${() => go('ishchilar')}><${Empty} text=${t('Ishchi topilmadi')} /><//>`
   const w = l.worker
@@ -66,6 +68,21 @@ export function WorkerPage({ arg, go }) {
   const advs = C.live(D.advances).filter((a) => a.worker_id === arg).sort((a, b) => (a.advance_date < b.advance_date ? 1 : -1))
   const debts = C.live(D.debts).filter((a) => a.worker_id === arg)
   const pays = C.live(D.salary_payments).filter((a) => a.worker_id === arg)
+
+  const allIn = C.live(D.work_entries).filter((e) => e.worker_id === arg && C.inRange(e.work_date, from, to))
+  const byId = new Map(l.entries.map((e) => [e.id, e]))
+  const cells = new Map(allIn.map((e) => [e.work_date + '|' + e.model_id, e]))
+  const mids = [...new Set(allIn.map((e) => e.model_id))].sort((a, b) => mcode(D, a).localeCompare(mcode(D, b), undefined, { numeric: true }))
+  const dates = [...new Set(allIn.map((e) => e.work_date))].sort().reverse()
+  const okIn = (m) => allIn.filter((e) => e.model_id === m && e.status !== 'returned')
+  const colPairs = (m) => C.sum(okIn(m), (e) => e.pairs)
+  const colMoney = (m) => C.sum(okIn(m), (e) => (byId.get(e.id) || {}).amount)
+  const inR = (d) => C.inRange(d, from, to)
+  const pAdv = C.sum(advs.filter((a) => a.status === 'paid' && inR(a.advance_date)), (a) => a.amount)
+  const pDebt = C.sum(debts.filter((a) => inR(a.debt_date)), (a) => a.amount)
+  const pPaid = C.sum(pays.filter((a) => inR(a.paid_date)), (a) => a.amount)
+  const net = l.periodEarned - pAdv - pDebt - pPaid
+  const editing = edit ? (C.live(D.work_entries).find((x) => x.id === edit.id) || edit) : null
 
   async function returnEntry(e) {
     const r = await ask(t('Ish tuzatish uchun qaytarilsinmi? Ishchi uni qayta kiritadi.'), { input: t('Sabab (ixtiyoriy)'), danger: true, options: [{ value: true, label: t('Qaytarish'), tone: 'danger' }] })
@@ -100,17 +117,29 @@ export function WorkerPage({ arg, go }) {
       <button class="btn" onClick=${() => setSheet('advances')}>${t('Avans berish')}</button>
       <button class="btn" onClick=${() => setSheet('debts')}>${t('Qarz yozish')}</button>
     </div>
-    <h2>${t('Ishlar hisoboti')}</h2>
+    <h2>${t('Ishlar jadvali')}</h2>
     <div class="datebar"><input type="date" value=${from} onInput=${(e) => setFrom(e.target.value)} /><span>—</span><input type="date" value=${to} onInput=${(e) => setTo(e.target.value)} /></div>
-    <div class="grid"><${Stat} n=${C.fmt(l.periodPairs)} label=${t('Ish soni (juft)')} /><${Stat} tone="green" n=${C.fmt(l.periodEarned)} label=${t('Davr ish haqi (so‘m)')} /></div>
-    ${rows.length === 0 && html`<${Empty} icon="book" text=${t('Bu davrda ish yo‘q')} />`}
-    <div class="list">${rows.map((e) => html`<div class="card" style="margin:0;padding:12px 14px">
-      <div class="kv"><b>${fmtDate(e.work_date)} · ${t('Model')} ${mcode(D, e.model_id)}</b><span class=${'pill ' + STATUS[e.status][1]}>${t(STATUS[e.status][0])}</span></div>
-      <div class="kv"><span>${e.pairs} ${t('juft')} × ${e.price === null ? '?' : C.fmt(e.price)}</span><b>${C.fmt(e.amount)}</b></div>
-      <div class="btns">
-        ${e.status === 'pending' && html`<button class="btn primary sm" onClick=${() => S.patch('work_entries', e.id, { status: 'approved' })}><${Icon} name="check" size=${16} />${t('Tasdiqlash')}</button>`}
-        <button class="btn sm" onClick=${() => returnEntry(e)}>${t('Qaytarish')}</button>
-      </div></div>`)}</div>
+    ${dates.length === 0 ? html`<${Empty} icon="book" text=${t('Bu davrda ish yo‘q')} />` : html`
+      <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${mids.map((m) => html`<th>${mcode(D, m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
+        <tbody>${dates.map((d) => {
+          const day = mids.map((m) => cells.get(d + '|' + m))
+          const tot = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)
+          return html`<tr><td>${fmtDate(d).slice(0, 5)}</td>
+            ${day.map((e) => html`<td class=${!e ? 'zero' : e.status === 'pending' ? 'has pend tapc' : e.status === 'returned' ? 'ret tapc' : 'has tapc'} onClick=${e ? () => setEdit(e) : null}>${e ? e.pairs : '·'}</td>`)}
+            <td class=${tot ? 'has' : 'zero'}>${tot || '·'}</td></tr>`
+        })}</tbody>
+        <tfoot><tr><td>${t('Juft')}</td>${mids.map((m) => html`<td>${C.fmt(colPairs(m))}</td>`)}<td>${C.fmt(l.periodPairs)}</td></tr>
+          <tr><td>${t('So‘m')}</td>${mids.map((m) => html`<td>${C.fmt(colMoney(m))}</td>`)}<td>${C.fmt(l.periodEarned)}</td></tr></tfoot></table></div>
+      <p class="muted small"><span class="dot" style="background:#f59e0b"></span> ${t('Sariq: tasdiqlanmagan')} · <span class="dot" style="background:var(--red)"></span> ${t('Qizil: qaytarilgan')} · ${t('Katakni bossangiz tasdiqlash, tuzatish yoki qaytarish oynasi ochiladi.')}</p>`}
+    <button class="btn block" style="margin-bottom:12px" onClick=${() => setShowCalc(!showCalc)}><${Icon} name="chart" size=${18} />${t('Hisoblash')}</button>
+    ${showCalc && html`<div class="card">
+      <div class="muted small">${fmtDate(from)} — ${fmtDate(to)}</div>
+      <div class="kv"><span>${t('Ish soni (juft)')}</span><b>${C.fmt(l.periodPairs)}</b></div>
+      <div class="kv"><span>${t('Hisoblangan ish haqi')}</span><b>${C.fmt(l.periodEarned)}</b></div>
+      <div class="kv"><span>− ${t('Avans')}</span><b>${C.fmt(pAdv)}</b></div>
+      <div class="kv"><span>− ${t('Qarz')}</span><b>${C.fmt(pDebt)}</b></div>
+      <div class="kv"><span>− ${t('To‘langan')}</span><b>${C.fmt(pPaid)}</b></div>
+      <div class="kv big"><span>${t('Shu davr bo‘yicha qoladi')}</span><b class=${net >= 0 ? 'pos' : 'neg'}>${C.fmt(net)} ${t('so‘m')}</b></div></div>`}
     ${advs.length > 0 && html`<h2>${t('Avanslar')}</h2><div class="list">${advs.map((a) => html`<div class="card" style="margin:0;padding:12px 14px">
       <div class="kv"><b>${C.fmt(a.amount)} ${t('so‘m')}</b><span class=${'pill ' + (a.status === 'paid' ? 'green' : a.status === 'rejected' ? 'red' : 'amber')}>${t(a.status === 'paid' ? 'Berilgan' : a.status === 'rejected' ? 'Rad etilgan' : 'So‘ralgan')}</span></div>
       <div class="muted small">${fmtDate(a.advance_date)} ${a.note ? '· ' + a.note : ''}</div>
@@ -123,7 +152,38 @@ export function WorkerPage({ arg, go }) {
     <div style="margin-top:18px">${w.deleted_at
       ? html`<button class="btn block" onClick=${restoreWorker}>${t('Arxivdan qaytarish')}</button>`
       : html`<button class="btn danger block" onClick=${archiveWorker}><${Icon} name="archive" size=${18} />${t('Ishchini arxivlash')}</button>`}</div>
+    ${editing && html`<${EntryEdit} e=${editing} price=${(byId.get(editing.id) || {}).price} onClose=${() => setEdit(null)} />`}
     ${sheet && html`<${MoneySheet} kind=${sheet} worker=${w} balance=${l.balance} onClose=${() => setSheet(null)} />`}
+  <//>`
+}
+
+/** Boshliq: bitta katakdagi ishni tasdiqlash, tuzatish yoki qaytarish */
+function EntryEdit({ e, price, onClose }) {
+  const { t } = useT(); const S = useStore(); const D = S.all()
+  const [n, setN] = useState(String(e.pairs))
+  const st = STATUS[e.status] || STATUS.pending
+  function save(ev) {
+    if (ev) ev.preventDefault()
+    const v = Number(n)
+    if (n === '' || !(v >= 0)) return toast(t('Juft sonini kiriting'), 'err')
+    S.patch('work_entries', e.id, { pairs: v }); toast(t('Saqlandi')); onClose()
+  }
+  const setStatus = (status) => { S.patch('work_entries', e.id, { status }); toast(t('Saqlandi')); onClose() }
+  async function back() {
+    const r = await ask(t('Ish tuzatish uchun qaytarilsinmi? Ishchi uni qayta kiritadi.'), { input: t('Sabab (ixtiyoriy)'), danger: true, options: [{ value: true, label: t('Qaytarish'), tone: 'danger' }] })
+    if (r) { S.patch('work_entries', e.id, { status: 'returned', return_note: r.text || '' }); toast(t('Qaytarildi')); onClose() }
+  }
+  return html`<${Sheet} title=${`${fmtDate(e.work_date)} · ${t('Model')} ${mcode(D, e.model_id)}`} onClose=${onClose}>
+    <form class="fform" onSubmit=${save}>
+      <div class="kv"><span>${t('Holati')}</span><span class=${'pill ' + st[1]}>${t(st[0])}</span></div>
+      <div class="kv"><span>${t('Bir juft narxi')}</span><b>${price === null || price === undefined ? t('belgilanmagan') : C.fmt(price)}</b></div>
+      <${Field} label=${t('Juft soni')}><input class="bigin" inputmode="numeric" enterkeyhint="go" value=${n} onInput=${(ev) => setN(ev.target.value.replace(/\D/g, ''))} /><//>
+      <div class="kv big"><span>${t('Ish haqi')}</span><b class="pos">${C.fmt((Number(n) || 0) * (price || 0))} ${t('so‘m')}</b></div>
+      <button type="submit" class="btn primary block">${t('Saqlash')}</button>
+      ${e.status === 'pending' && html`<button type="button" class="btn block" onClick=${() => setStatus('approved')}><${Icon} name="check" size=${18} />${t('Tasdiqlash')}</button>`}
+      ${e.status === 'approved' && html`<button type="button" class="btn block" onClick=${() => setStatus('pending')}>${t('Qayta ochish (tahrirlash uchun)')}</button>`}
+      ${e.status !== 'returned' && html`<button type="button" class="btn danger block" onClick=${back}>${t('Qaytarish')}</button>`}
+    </form>
   <//>`
 }
 

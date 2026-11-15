@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks'
-import { html, useT, useStore, Page, Stat, Row, Icon, BottomNav, useRoute, PasswordInput, LangSwitch, toast, todayStr, fmtDate } from './ui.js'
+import { html, useT, useStore, Page, Stat, Row, Icon, BottomNav, useRoute, PasswordInput, LangSwitch, toast, todayStr, fmtDate, Empty } from './ui.js'
 import { supabase, friendlyError } from './lib.js'
 import * as C from './calc.js'
 import { SyncBadge, SyncPage } from './sync-ui.js'
@@ -36,40 +36,26 @@ export function BossApp({ membership, onLogout }) {
 function Home({ go, membership }) {
   const { t } = useT()
   const S = useStore(); const D = S.all(); const today = todayStr()
-  const [reqs, setReqs] = useState(0)
-  useEffect(() => {
-    supabase.rpc('list_pending_members', { p_company: membership.company_id }).then(({ data }) => setReqs((data || []).length), () => {})
-  }, [membership.company_id])
-  const prod = C.production(D, today)
-  const types = C.live(D.worker_types).sort((a, b) => KASB_ORDER.indexOf(a.code) - KASB_ORDER.indexOf(b.code))
-  const unverified = C.live(D.work_entries).filter((e) => e.status === 'pending').length
-  const todayExp = C.sum(C.live(D.expenses).filter((x) => x.expense_date === today), (x) => x.amount)
   const company = membership.companies && membership.companies.name
+  const days = []
+  for (let i = 0; i < 30; i++) days.push(C.addDays(today, -i))
+  const per = days.map((d) => ({ d, p: C.production(D, d) }))
+  const used = new Set(); per.forEach((x) => x.p.rows.forEach((r) => used.add(r.modelId)))
+  const cols = C.live(D.models).filter((m) => m.is_active || used.has(m.id)).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+  const shown = per.filter((x) => x.p.pairs > 0 || x.d === today).slice(0, 14)
+  const todayP = per[0].p
   return html`<${Page} title=${company} sub=${fmtDate(today)} right=${html`<${SyncBadge} go=${go} />`}>
     <button class="prod-card" onClick=${() => go('ishlab')}>
-      <span class="cap">${t('Bugun tayyor ish')}</span>
-      <span class="big">${C.fmt(prod.pairs)} ${t('juft')}</span>
-      <div class="mini4">
-        <div><b>${C.fmt(prod.wages)}</b><small>${t('Ish haqi (so‘m)')}</small></div>
-        <div><b>${C.fmt(todayExp)}</b><small>${t('Bugungi xarajat (so‘m)')}</small></div>
-      </div>
+      <span class="cap">${t('Bugun chiqqan ish')}</span>
+      <span class="big">${C.fmt(todayP.pairs)} ${t('juft')}</span>
     </button>
-    ${unverified + reqs === 0
-      ? html`<div class="card"><b>✓ ${t('Hammasi joyida')}</b><span class="muted">${t('Tasdiq kutayotgan ish yoki so‘rov yo‘q')}</span></div>`
-      : html`<div class="list">
-          ${unverified > 0 && html`<${Row} icon="check" tone="amber" title=${t('Tasdiq kutayotgan ishlar')} right=${unverified} onClick=${() => go('tasdiq')} />`}
-          ${reqs > 0 && html`<${Row} icon="users" tone="amber" title=${t('Yangi ishchi so‘rovlari')} right=${reqs} onClick=${() => go('ishchilar')} />`}
-        </div>`}
-    <h2>${t('Ishchilar')}</h2>
-    <div class="list">
-      ${types.map((ty) => {
-        const r = C.kasbReport(D, ty.id, today)
-        return html`<${Row} icon="users" title=${t(ty.name + 'lar')} sub=${t('Bugun') + ': ' + C.fmt(r.dayPairs) + ' ' + t('juft')} onClick=${() => go('kasb/' + ty.id)} />`
-      })}
-    </div>
-    <div class="list">
-      <${Row} icon="chart" title=${t('Moliyaviy hisobot')} sub=${t('Tushum, foyda, naqd pul, qarzlar')} onClick=${() => go('hisobot')} />
-    </div>
+    <h2>${t('Kunlik ish chiqishi')}</h2>
+    ${cols.length === 0 || shown.length === 0 ? html`<${Empty} icon="book" text=${t('Hozircha ish yo‘q')} />` : html`
+      <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${cols.map((m) => html`<th>${m.code}</th>`)}<th>${t('Jami')}</th></tr></thead>
+        <tbody>${shown.map(({ d, p }) => html`<tr class=${d === today ? 'today' : ''}><td>${fmtDate(d)}</td>
+          ${cols.map((m) => { const r = p.rows.find((x) => x.modelId === m.id); return html`<td class=${r ? 'has' : 'zero'}>${r ? r.pairs : '·'}</td>` })}
+          <td class=${p.pairs ? 'has' : 'zero'}>${p.pairs || '·'}</td></tr>`)}</tbody></table></div>
+      <p class="muted small">${t('Kosiblar bajargan ishlar (qaytarilganlar hisobga olinmaydi). Batafsil ma‘lumot bo‘limlar ichida.')}</p>`}
   <//>`
 }
 

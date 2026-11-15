@@ -159,7 +159,7 @@ export function Field({ label, children }) {
 
 export function MoneyInput({ value, onChange, placeholder }) {
   const shown = value === '' || value == null ? '' : Number(value).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')
-  return html`<input inputmode="numeric" placeholder=${placeholder || '0'} value=${shown}
+  return html`<input inputmode="numeric" enterkeyhint="go" placeholder=${placeholder || '0'} value=${shown}
     onInput=${(e) => { const d = e.target.value.replace(/\D/g, ''); onChange(d === '' ? '' : Number(d)) }} />`
 }
 

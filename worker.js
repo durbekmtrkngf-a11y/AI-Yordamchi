@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks'
-import { html, useT, useStore, Page, Stat, Row, Icon, Field, MoneyInput, Sheet, Empty, BottomNav, useRoute, LangSwitch, toast, ask, todayStr, fmtDate } from './ui.js'
+import { html, useT, useStore, Page, Stat, Row, Icon, Field, MoneyInput, Sheet, Empty, BottomNav, useRoute, LangSwitch, toast, ask, todayStr, fmtDate, downloadFile } from './ui.js'
 import { supabase } from './lib.js'
 import * as C from './calc.js'
 import { SyncBadge, SyncPage } from './sync-ui.js'
@@ -49,26 +49,82 @@ function Home({ go, membership }) {
 }
 
 /* ===================== Ish daftari: sana × model kodi jadvali ===================== */
+/** Katak: son to'g'ridan-to'g'ri yoziladi. Klaviaturadagi "keyingi/o'tish" tugmasi saqlaydi va keyingi katakka o'tadi. */
+function Cell({ entry, onCommit }) {
+  const { t } = useT()
+  const stored = entry ? String(entry.pairs) : ''
+  const [v, setV] = useState(stored)
+  const [focus, setFocus] = useState(false)
+  useEffect(() => { if (!focus) setV(stored) }, [stored, focus])
+  const locked = !!entry && entry.status === 'approved'
+  const cls = 'cellin' + (entry ? (entry.status === 'pending' ? ' pend' : entry.status === 'returned' ? ' ret' : ' ok') : '')
+  function commit() {
+    setFocus(false)
+    const n = v === '' ? 0 : Number(v)
+    if (!entry && n === 0) return
+    if (entry && n === entry.pairs && entry.status !== 'returned') return
+    onCommit(n)
+  }
+  return html`<input class=${cls} inputmode="numeric" enterkeyhint="next" placeholder="" value=${v} readOnly=${locked}
+    onFocus=${(e) => { if (locked) { toast(t('Tasdiqlangan. O‘zgartirish uchun boshliqdan ruxsat so‘rang.')); e.target.blur(); return } setFocus(true); try { e.target.select() } catch (_) {} }}
+    onInput=${(e) => setV(e.target.value.replace(/\D/g, '').slice(0, 5))}
+    onBlur=${commit}
+    onKeyDown=${(e) => {
+      if (e.key !== 'Enter' && e.keyCode !== 13) return
+      e.preventDefault()
+      const all = [...document.querySelectorAll('.cellin:not([readonly])')]
+      const i = all.indexOf(e.target)
+      e.target.blur()
+      if (all[i + 1]) all[i + 1].focus()
+    }} />`
+}
+
 function Notebook({ go }) {
-  const { t } = useT(); const { D, w, today } = useMe()
+  const { t } = useT(); const { S, D, w, today } = useMe()
   const [sheet, setSheet] = useState(null); const [jump, setJump] = useState('')
   if (!w) return html`<${Page} title=${t('Ish daftari')}><${Empty} icon="clock" text=${t('Ma‘lumotlar yuklanmoqda...')} /><//>`
   const models = C.live(D.models).filter((m) => m.is_active).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
   const entries = C.live(D.work_entries)
   const cell = new Map(entries.map((e) => [e.work_date + '|' + e.model_id, e]))
   const dates = new Set(entries.map((e) => e.work_date))
-  for (let i = 0; i < 7; i++) dates.add(C.addDays(today, -i))
+  for (let i = 0; i < 3; i++) dates.add(C.addDays(today, -i))
   let rows = [...dates].filter((d) => d <= today).sort().reverse().slice(0, 120)
   if (jump) rows = [jump]
-  return html`<${Page} title=${t('Ish daftari')} sub=${w.full_name} right=${html`<button class="icon-btn light" onClick=${() => setSheet(today)}><${Icon} name="plus" /></button>`}>
+  const commit = (d, m, n) => {
+    if (d > today) return toast(t('Kelajak sanasiga ish kiritib bo‘lmaydi'), 'err')
+    S.save('work_entries', { worker_id: w.id, model_id: m.id, work_date: d, pairs: n, status: 'pending', return_note: '' })
+  }
+  async function exportGrid() {
+    const kind = await ask(t('Daftar qaysi formatda saqlansin?'), { options: [{ value: 'csv', label: 'CSV', tone: 'primary' }, { value: 'xlsx', label: 'Excel (XLSX)', tone: 'navy' }] })
+    if (!kind) return
+    const days = [...new Set(entries.map((e) => e.work_date))].sort().reverse()
+    const aoa = [[t('Sana'), ...models.map((m) => m.code), t('Jami')], ...days.map((d) => {
+      const day = models.map((m) => cell.get(d + '|' + m.id))
+      return [fmtDate(d), ...day.map((e) => (e ? e.pairs : '')), C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)]
+    })]
+    if (kind === 'csv') {
+      const q = (v) => '"' + String(v).replace(/"/g, '""') + '"'
+      downloadFile(`daftar-${today}.csv`, '\ufeff' + aoa.map((r) => r.map(q).join(',')).join('\n'), 'text/csv;charset=utf-8')
+    } else {
+      try {
+        const X = await import('xlsx'); const XL = X.default && X.default.utils ? X.default : X
+        const wb = XL.utils.book_new(); XL.utils.book_append_sheet(wb, XL.utils.aoa_to_sheet(aoa), 'Daftar'); XL.writeFile(wb, `daftar-${today}.xlsx`)
+      } catch (_) { toast(t('Excel kutubxonasi yuklanmadi (internet kerak). CSV ni sinab ko‘ring.'), 'err') }
+    }
+  }
+  return html`<${Page} title=${t('Ish daftari')} sub=${w.full_name} right=${html`<${SyncBadge} go=${go} />`}>
+    <button class="btn block" onClick=${exportGrid}><${Icon} name="download" size=${18} />${t('Daftarni Excel/CSV qilish')}</button>
     <div class="datebar"><${Icon} name="search" size=${20} /><input type="date" max=${today} value=${jump} onInput=${(e) => setJump(e.target.value)} />${jump && html`<button class="btn sm" onClick=${() => setJump('')}>${t('Hammasi')}</button>`}</div>
     ${models.length === 0 && html`<div class="msg warn">${t('Boshliq hali model qo‘shmagan.')}</div>`}
-    <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${m.code}</th>`)}<th>${t('Jami')}</th></tr></thead>
-      <tbody>${rows.map((d) => { const day = models.map((m) => cell.get(d + '|' + m.id)); const total = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)
-        return html`<tr class="tap" onClick=${() => setSheet(d)}><td>${fmtDate(d).slice(0, 5)}${d === today ? ' •' : ''}</td>
-          ${day.map((e) => html`<td class=${!e ? 'zero' : e.status === 'pending' ? 'has pend' : e.status === 'returned' ? 'ret' : 'has'}>${e ? e.pairs : '·'}</td>`)}
-          <td class=${total ? 'has' : 'zero'}>${total || '·'}</td></tr>` })}</tbody></table></div>
-    <p class="muted small"><span class="dot" style="background:#f59e0b"></span> ${t('Sariq: boshliq tasdiqlashini kutmoqda')} · <span class="dot" style="background:var(--red)"></span> ${t('Qizil: qaytarilgan, tuzating')} · ${t('Qatorni bosib ish kiriting.')}</p>
+    <div class="table-wrap"><table class="grid-t cells"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${m.code}</th>`)}<th>${t('Jami')}</th></tr></thead>
+      <tbody>${rows.map((d) => {
+        const day = models.map((m) => cell.get(d + '|' + m.id))
+        const total = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)
+        return html`<tr class=${d === today ? 'today' : ''} key=${d}><td class="dcol" onClick=${() => setSheet(d)}>${fmtDate(d)}</td>
+          ${models.map((m, i) => html`<td class="cin" key=${m.id}><${Cell} entry=${day[i]} onCommit=${(n) => commit(d, m, n)} /></td>`)}
+          <td class=${total ? 'has' : 'zero'}>${total || '·'}</td></tr>`
+      })}</tbody></table></div>
+    <p class="muted small"><span class="dot" style="background:#f59e0b"></span> ${t('Sariq: boshliq tasdiqlashini kutmoqda')} · <span class="dot" style="background:var(--red)"></span> ${t('Qizil: qaytarilgan, tuzating')} · ${t('Katakka sonni yozing, klaviaturadagi tugma saqlaydi. Sanani bossangiz +5, +10 tugmalari chiqadi.')}</p>
     ${sheet && html`<${EntrySheet} date=${sheet} models=${models} worker=${w} onClose=${() => setSheet(null)} />`}
   <//>`
 }
