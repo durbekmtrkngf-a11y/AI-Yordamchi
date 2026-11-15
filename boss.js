@@ -47,33 +47,29 @@ function Home({ go, membership }) {
   const company = membership.companies && membership.companies.name
   return html`<${Page} title=${company} sub=${fmtDate(today)} right=${html`<${SyncBadge} go=${go} />`}>
     <button class="prod-card" onClick=${() => go('ishlab')}>
-      <span class="cap">${t('Bugun sexdan chiqqan tayyor ish')}</span>
+      <span class="cap">${t('Bugun tayyor ish')}</span>
       <span class="big">${C.fmt(prod.pairs)} ${t('juft')}</span>
       <div class="mini4">
         <div><b>${C.fmt(prod.wages)}</b><small>${t('Ish haqi (so‘m)')}</small></div>
-        <div><b>${prod.cost ? C.fmt(prod.cost) : '—'}</b><small>${t('Tannarx (so‘m)')}</small></div>
-        <div><b>${prod.sale ? C.fmt(prod.sale) : '—'}</b><small>${t('Sotuv qiymati')}</small></div>
-        <div><b>${prod.sale ? C.fmt(prod.profit) : '—'}</b><small>${t('Taxminiy foyda')}</small></div>
+        <div><b>${C.fmt(todayExp)}</b><small>${t('Bugungi xarajat (so‘m)')}</small></div>
       </div>
     </button>
-    <div class="grid">
-      <${Stat} icon="check" tone=${unverified ? 'amber' : ''} n=${unverified} label=${t('Tasdiq kutayotgan ishlar')} onClick=${() => go('tasdiq')} />
-      <${Stat} icon="users" tone=${reqs ? 'amber' : ''} n=${reqs} label=${t('Yangi ishchi so‘rovlari')} onClick=${() => go('ishchilar')} />
-      <${Stat} icon="wallet" n=${C.fmt(todayExp)} label=${t('Bugungi xarajat (so‘m)')} onClick=${() => go('xarajat')} />
-      <${Stat} icon="chart" tone="green" n=${t('Hisobot')} label=${t('Moliyaviy hisobot')} onClick=${() => go('hisobot')} />
+    ${unverified + reqs === 0
+      ? html`<div class="card"><b>✓ ${t('Hammasi joyida')}</b><span class="muted">${t('Tasdiq kutayotgan ish yoki so‘rov yo‘q')}</span></div>`
+      : html`<div class="list">
+          ${unverified > 0 && html`<${Row} icon="check" tone="amber" title=${t('Tasdiq kutayotgan ishlar')} right=${unverified} onClick=${() => go('tasdiq')} />`}
+          ${reqs > 0 && html`<${Row} icon="users" tone="amber" title=${t('Yangi ishchi so‘rovlari')} right=${reqs} onClick=${() => go('ishchilar')} />`}
+        </div>`}
+    <h2>${t('Ishchilar')}</h2>
+    <div class="list">
+      ${types.map((ty) => {
+        const r = C.kasbReport(D, ty.id, today)
+        return html`<${Row} icon="users" title=${t(ty.name + 'lar')} sub=${t('Bugun') + ': ' + C.fmt(r.dayPairs) + ' ' + t('juft')} onClick=${() => go('kasb/' + ty.id)} />`
+      })}
     </div>
-    <h2>${t('Ishchilar hisoboti')}</h2>
-    ${types.map((ty) => {
-      const r = C.kasbReport(D, ty.id, today)
-      return html`<button class="kasb-card" onClick=${() => go('kasb/' + ty.id)}>
-        <div class="kasb-h"><span><${Icon} name="users" size=${18} />${t(ty.name + 'lar')}</span><${Icon} name="next" size=${18} /></div>
-        <div class="mini4">
-          <div><b>${C.fmt(r.dayPairs)}</b><small>${t('Bugun (juft)')}</small></div>
-          <div><b>${C.fmt(r.dayEarned)}</b><small>${t('Bugungi maosh')}</small></div>
-          <div><b>${C.fmt(r.totalPairs)}</b><small>${t('Jami ish (juft)')}</small></div>
-          <div><b>${C.fmt(r.totalEarned)}</b><small>${t('Jami maosh')}</small></div>
-        </div></button>`
-    })}
+    <div class="list">
+      <${Row} icon="chart" title=${t('Moliyaviy hisobot')} sub=${t('Tushum, foyda, naqd pul, qarzlar')} onClick=${() => go('hisobot')} />
+    </div>
   <//>`
 }
 
