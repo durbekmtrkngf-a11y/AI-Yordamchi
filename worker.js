@@ -1,76 +1,155 @@
 import { useState, useEffect } from 'preact/hooks'
-import { html, useT, LangSwitch, BottomNav, useRoute, Soon, todayStr } from './ui.js'
-import { supabase, friendlyError } from './lib.js'
+import { html, useT, useStore, Page, Stat, Row, Icon, Field, MoneyInput, Sheet, Empty, BottomNav, useRoute, LangSwitch, toast, ask, todayStr, fmtDate } from './ui.js'
+import { supabase } from './lib.js'
+import * as C from './calc.js'
+import { SyncBadge, SyncPage } from './sync-ui.js'
 
-const NAV = [
-  ['bosh', '🏠', 'Bosh sahifa'], ['daftar', '📒', 'Ish daftari'],
-  ['avans', '💵', 'Avans'], ['yana', '⋯', 'Yana'],
-]
+const NAV = [['bosh', 'home', 'Bosh sahifa'], ['daftar', 'book', 'Ish daftari'], ['avans', 'cash', 'Avans'], ['yana', 'more', 'Yana']]
 
-/** Ishchi kabineti: boshliq kabinetidan butunlay alohida interfeys.
-    Server (RLS) ishchiga faqat o'z ma'lumotini beradi. */
+/** Ishchi kabineti: boshliq kabinetidan alohida interfeys. Server (RLS) faqat o'z ma'lumotini beradi. */
 export function WorkerApp({ membership, onLogout }) {
   const [route, go] = useRoute('bosh')
-  let page
-  if (route === 'daftar') page = html`<${Soon} title="Ish daftari" stage=${3} text="Kunlik jadval: sana va model kodlari bo‘yicha bajargan juftlaringizni kiritasiz." />`
-  else if (route === 'avans') page = html`<${Soon} title="Avans" stage=${4} text="Olingan avans, qarz, to‘langan pul va qolgan ish haqini ko‘rish; avans so‘rovi yuborish." />`
-  else if (route === 'yana') page = html`<${More} membership=${membership} onLogout=${onLogout} />`
-  else page = html`<${Home} membership=${membership} />`
-  return html`<div class="screen withnav">${page}</div>
-    <${BottomNav} items=${NAV} route=${NAV.some((n) => n[0] === route) ? route : 'bosh'} go=${go} />`
+  const [name] = route.split('/')
+  const p = { go, membership, onLogout }
+  const pages = { daftar: Notebook, avans: Advances, yana: More, sinx: (q) => html`<${SyncPage} back=${() => q.go('yana')} />` }
+  const Page_ = pages[name] || Home
+  const active = NAV.some((n) => n[0] === name) ? name : name === 'sinx' ? 'yana' : 'bosh'
+  return html`<${Page_} ...${p} /><${BottomNav} items=${NAV} route=${active} go=${go} />`
 }
 
-function Home({ membership }) {
-  const { t } = useT()
-  const [stat, setStat] = useState(null)
-  const [err, setErr] = useState('')
+const useMe = () => {
+  const S = useStore(); const D = S.all()
+  const w = (D.workers || []).find((x) => !x.deleted_at) || (D.workers || [])[0]
+  return { S, D, w, today: todayStr() }
+}
 
-  useEffect(() => {
-    ;(async () => {
-      const [w, a] = await Promise.all([
-        supabase.from('work_entries').select('pairs, work_date, status'),
-        supabase.from('advances').select('amount, status'),
-      ])
-      const e = w.error || a.error
-      if (e) return setErr(friendlyError(e.message))
-      const today = todayStr()
-      const valid = (w.data || []).filter((x) => x.status !== 'returned')
-      setStat({
-        todayPairs: valid.filter((x) => x.work_date === today).reduce((s, x) => s + x.pairs, 0),
-        totalPairs: valid.reduce((s, x) => s + x.pairs, 0),
-        advance: (a.data || []).filter((x) => x.status === 'paid').reduce((s, x) => s + Number(x.amount), 0),
-      })
-    })()
-  }, [])
-
-  const v = (x) => (stat ? x : '…')
-  return html`<div>
-    <h1 class="brand">${membership.companies && membership.companies.name}</h1>
-    <div class="label">${t('Kasbingiz')}: <b>${t((membership.worker_types && membership.worker_types.name) || '')}</b></div>
-    ${err && html`<div class="msg err">${err}</div>`}
+function Home({ go, membership }) {
+  const { t } = useT(); const { D, w, today } = useMe()
+  const company = membership.companies && membership.companies.name
+  const kasb = membership.worker_types && membership.worker_types.name
+  if (!w) return html`<${Page} title=${company} sub=${t(kasb || '')} right=${html`<${SyncBadge} go=${go} />`}><${Empty} icon="clock" text=${t('Ma‘lumotlar yuklanmoqda...')} /><//>`
+  const day = C.workerLedger(D, w.id, today, today); const all = C.workerLedger(D, w.id)
+  const returned = C.live(D.work_entries).filter((e) => e.status === 'returned').length
+  const reqAdv = C.live(D.advances).filter((a) => a.status === 'requested').length
+  return html`<${Page} title=${w.full_name} sub=${`${company} · ${t(kasb || '')}`} right=${html`<${SyncBadge} go=${go} />`}>
+    ${returned > 0 && html`<button class="msg err" style="width:100%;text-align:left;margin-bottom:12px" onClick=${() => go('daftar')}><b>${returned} ${t('ta ish qaytarilgan')}</b> — ${t('tuzatib qayta kiriting')}</button>`}
     <div class="grid">
-      <div class="stat"><div class="n">${v(stat && stat.todayPairs)}</div><div class="l">${t('Bugun bajargan ish (juft)')}</div></div>
-      <div class="stat"><div class="n">${v(stat && stat.totalPairs)}</div><div class="l">${t('Jami bajargan ish (juft)')}</div></div>
-      <div class="stat"><div class="n">${v(stat && stat.advance)}</div><div class="l">${t('Olingan avans (so‘m)')}</div></div>
-      <div class="stat soon"><div class="n">—</div><div class="l">${t('Hisoblangan maosh (4-bosqich)')}</div></div>
-      <div class="stat soon"><div class="n">—</div><div class="l">${t('Qolgan ish haqi (4-bosqich)')}</div></div>
+      <${Stat} icon="shoe" n=${C.fmt(day.periodPairs)} label=${t('Bugun bajargan ish (juft)')} />
+      <${Stat} icon="cash" tone="green" n=${C.fmt(day.periodEarned)} label=${t('Bugungi ishlab topgan pul')} />
+      <${Stat} icon="book" n=${C.fmt(all.totalPairs)} label=${t('Jami bajargan ish (juft)')} />
+      <${Stat} icon="trend" n=${C.fmt(all.earned)} label=${t('Jami hisoblangan maosh')} />
+      <${Stat} icon="wallet" n=${C.fmt(all.advances)} label=${t('Olingan avans')} onClick=${() => go('avans')} />
+      <${Stat} icon="alert" tone=${all.debts ? 'amber' : ''} n=${C.fmt(all.debts)} label=${t('Qarz')} />
+      <${Stat} wide tone="dark" icon="cash" n=${`${C.fmt(all.balance)} ${t('so‘m')}`} label=${t('Qolgan ish haqi')} />
     </div>
-  </div>`
+    ${all.unverified > 0 && html`<div class="msg warn">${t('Shundan boshliq tasdiqlamagan')}: ${C.fmt(all.unverified)} ${t('so‘m')}</div>`}
+    ${reqAdv > 0 && html`<div class="msg ok" style="margin-top:10px">${reqAdv} ${t('ta avans so‘rovi boshliq javobini kutmoqda')}</div>`}
+    <button class="btn primary block" style="margin-top:14px" onClick=${() => go('daftar')}><${Icon} name="plus" size=${18} />${t('Ish kiritish')}</button>
+  <//>`
 }
 
-function More({ membership, onLogout }) {
-  const { t } = useT()
-  const [prof, setProf] = useState(null)
-  useEffect(() => {
-    supabase.from('profiles').select('full_name, phone').maybeSingle().then(({ data }) => setProf(data))
-  }, [])
-  return html`<div>
-    <h1 class="brand">${t('Yana')}</h1>
-    ${prof && html`<div class="card">
-      <div class="label">${t('Profil')}</div><b>${prof.full_name}</b><span class="muted">${prof.phone}</span>
-      <div class="label">${t('Kasbingiz')}</div><b>${t((membership.worker_types && membership.worker_types.name) || '')}</b>
-    </div>`}
-    <div class="card row"><span>${t('Til')}</span><${LangSwitch} /></div>
-    <button class="danger" onClick=${onLogout}>${t('Chiqish')}</button>
-  </div>`
+/* ===================== Ish daftari: sana × model kodi jadvali ===================== */
+function Notebook({ go }) {
+  const { t } = useT(); const { D, w, today } = useMe()
+  const [sheet, setSheet] = useState(null); const [jump, setJump] = useState('')
+  if (!w) return html`<${Page} title=${t('Ish daftari')}><${Empty} icon="clock" text=${t('Ma‘lumotlar yuklanmoqda...')} /><//>`
+  const models = C.live(D.models).filter((m) => m.is_active).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+  const entries = C.live(D.work_entries)
+  const cell = new Map(entries.map((e) => [e.work_date + '|' + e.model_id, e]))
+  const dates = new Set(entries.map((e) => e.work_date))
+  for (let i = 0; i < 7; i++) dates.add(C.addDays(today, -i))
+  let rows = [...dates].filter((d) => d <= today).sort().reverse().slice(0, 120)
+  if (jump) rows = [jump]
+  return html`<${Page} title=${t('Ish daftari')} sub=${w.full_name} right=${html`<button class="icon-btn light" onClick=${() => setSheet(today)}><${Icon} name="plus" /></button>`}>
+    <div class="datebar"><${Icon} name="search" size=${20} /><input type="date" max=${today} value=${jump} onInput=${(e) => setJump(e.target.value)} />${jump && html`<button class="btn sm" onClick=${() => setJump('')}>${t('Hammasi')}</button>`}</div>
+    ${models.length === 0 && html`<div class="msg warn">${t('Boshliq hali model qo‘shmagan.')}</div>`}
+    <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${m.code}</th>`)}<th>${t('Jami')}</th></tr></thead>
+      <tbody>${rows.map((d) => { const day = models.map((m) => cell.get(d + '|' + m.id)); const total = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)
+        return html`<tr class="tap" onClick=${() => setSheet(d)}><td>${fmtDate(d).slice(0, 5)}${d === today ? ' •' : ''}</td>
+          ${day.map((e) => html`<td class=${!e ? 'zero' : e.status === 'pending' ? 'has pend' : e.status === 'returned' ? 'ret' : 'has'}>${e ? e.pairs : '·'}</td>`)}
+          <td class=${total ? 'has' : 'zero'}>${total || '·'}</td></tr>` })}</tbody></table></div>
+    <p class="muted small"><span class="dot" style="background:#f59e0b"></span> ${t('Sariq: boshliq tasdiqlashini kutmoqda')} · <span class="dot" style="background:var(--red)"></span> ${t('Qizil: qaytarilgan, tuzating')} · ${t('Qatorni bosib ish kiriting.')}</p>
+    ${sheet && html`<${EntrySheet} date=${sheet} models=${models} worker=${w} onClose=${() => setSheet(null)} />`}
+  <//>`
+}
+
+function EntrySheet({ date, models, worker, onClose }) {
+  const { t } = useT(); const S = useStore(); const D = S.all(); const today = todayStr()
+  const prices = C.live(D.model_prices)
+  const find = (d, m) => C.live(D.work_entries).find((e) => e.work_date === d && e.model_id === m)
+  const [d, setD] = useState(date); const [m, setM] = useState(models[0] ? models[0].id : '')
+  const [pairs, setPairs] = useState(() => { const e = models[0] && find(date, models[0].id); return e ? e.pairs : '' })
+  const ex = m ? find(d, m) : null
+  const pick = (nd, nm) => { setD(nd); setM(nm); const e = find(nd, nm); setPairs(e ? e.pairs : '') }
+  const price = m ? C.priceFor(prices, m, worker.worker_type_id, d) : null
+  const locked = ex && ex.status === 'approved'
+  function save() {
+    if (!m) return toast(t('Model tanlang'), 'err')
+    if (d > today) return toast(t('Kelajak sanasiga ish kiritib bo‘lmaydi'), 'err')
+    const n = Number(pairs)
+    if (!(n >= 0) || pairs === '') return toast(t('Juft sonini kiriting'), 'err')
+    if (n === 0 && !ex) return toast(t('Juft soni 0 dan katta bo‘lsin'), 'err')
+    S.save('work_entries', { worker_id: worker.id, model_id: m, work_date: d, pairs: n, status: 'pending', return_note: '' })
+    toast(t('Saqlandi')); onClose()
+  }
+  const add = (k) => setPairs((Number(pairs) || 0) + k)
+  return html`<${Sheet} title=${t('Ish kiritish')} onClose=${onClose}>
+    <${Field} label=${t('Sana')}><input type="date" max=${today} value=${d} onInput=${(e) => pick(e.target.value || d, m)} /><//>
+    <${Field} label=${t('Model kodi')}><div class="chips" style="flex-wrap:wrap;overflow:visible">${models.map((x) => html`<button class=${m === x.id ? 'on' : ''} onClick=${() => pick(d, x.id)}>${x.code}</button>`)}</div><//>
+    ${ex && ex.status === 'returned' && html`<div class="msg err">${t('Boshliq qaytargan')}${ex.return_note ? ': ' + ex.return_note : ''}. ${t('Tuzatib qayta saqlang.')}</div>`}
+    ${locked && html`<div class="msg warn">${t('Bu ish tasdiqlangan. O‘zgartirish uchun boshliqdan ruxsat so‘rang.')}</div>`}
+    <input class="bigin" inputmode="numeric" placeholder="0" disabled=${locked} value=${pairs} onInput=${(e) => { const v = e.target.value.replace(/\D/g, ''); setPairs(v === '' ? '' : Number(v)) }} />
+    <div class="qbtns"><button class="btn" disabled=${locked} onClick=${() => add(1)}>+1</button><button class="btn" disabled=${locked} onClick=${() => add(5)}>+5</button>
+      <button class="btn" disabled=${locked} onClick=${() => add(10)}>+10</button><button class="btn" disabled=${locked} onClick=${() => add(20)}>+20</button></div>
+    <div class="btns"><button class="btn sm ghost" disabled=${locked} onClick=${() => setPairs('')}>${t('Tozalash')}</button>
+      <button class="btn sm ghost" disabled=${locked || !(pairs > 0)} onClick=${() => setPairs(Math.max(0, Number(pairs) - 1))}>−1</button></div>
+    <div class="card flat"><div class="kv"><span>${t('Bir juft narxi')}</span><b>${price === null ? t('belgilanmagan') : C.fmt(price)}</b></div>
+      <div class="kv big"><span>${t('Ish haqi')}</span><b class="pos">${C.fmt((Number(pairs) || 0) * (price || 0))} ${t('so‘m')}</b></div></div>
+    <button class="btn primary block" disabled=${locked} onClick=${save}>${t('Saqlash')}</button>
+  <//>`
+}
+
+/* ===================== Avans, qarz, to'lovlar ===================== */
+function Advances({ go }) {
+  const { t } = useT(); const { S, D, w } = useMe()
+  const [amount, setAmount] = useState(''); const [note, setNote] = useState('')
+  if (!w) return html`<${Page} title=${t('Avans')}><${Empty} icon="clock" text=${t('Ma‘lumotlar yuklanmoqda...')} /><//>`
+  const l = C.workerLedger(D, w.id)
+  const advs = C.live(D.advances).sort((a, b) => (a.created_at || 'z') < (b.created_at || 'z') ? 1 : -1)
+  const pays = C.live(D.salary_payments).sort((a, b) => (a.paid_date < b.paid_date ? 1 : -1))
+  async function send() {
+    if (!amount || amount <= 0) return toast(t('Summani kiriting'), 'err')
+    if (amount > l.balance && !(await ask(`${t('So‘ralgan summa qolgan ish haqidan katta')} (${C.fmt(l.balance)}). ${t('Baribir yuborilsinmi?')}`))) return
+    S.save('advances', { worker_id: w.id, amount, status: 'requested', advance_date: todayStr(), note }); setAmount(''); setNote(''); toast(t('Avans so‘rovi yuborildi'))
+  }
+  const st = { requested: ['So‘ralgan', 'amber'], paid: ['Berilgan', 'green'], rejected: ['Rad etilgan', 'red'] }
+  return html`<${Page} title=${t('Avans va hisob')} sub=${w.full_name} right=${html`<${SyncBadge} go=${go} />`}>
+    <div class="card">
+      <div class="kv"><span>${t('Jami hisoblangan maosh')}</span><b>${C.fmt(l.earned)}</b></div>
+      <div class="kv"><span>− ${t('Olingan avans')}</span><b>${C.fmt(l.advances)}</b></div>
+      <div class="kv"><span>− ${t('Qaytarilishi kerak bo‘lgan qarz')}</span><b>${C.fmt(l.debts)}</b></div>
+      <div class="kv"><span>− ${t('To‘langan pul')}</span><b>${C.fmt(l.paid)}</b></div>
+      <div class="kv big"><span>${t('Qolgan ish haqi')}</span><b class=${l.balance >= 0 ? 'pos' : 'neg'}>${C.fmt(l.balance)} ${t('so‘m')}</b></div>
+    </div>
+    <div class="card"><h2 style="margin:0">${t('Avans so‘rash')}</h2>
+      <${Field} label=${t('Summa (so‘m)')}><${MoneyInput} value=${amount} onChange=${setAmount} /><//>
+      <${Field} label=${t('Izoh')}><input value=${note} onInput=${(e) => setNote(e.target.value)} /><//>
+      <button class="btn primary block" onClick=${send}>${t('So‘rov yuborish')}</button>
+      <span class="muted small">${t('Avansni boshliq tasdiqlaydi va pul berilganini o‘zi qayd etadi.')}</span></div>
+    ${advs.length > 0 && html`<h2>${t('Avanslarim')}</h2><div class="list">${advs.map((a) => html`<${Row} icon="cash" title=${`${C.fmt(a.amount)} ${t('so‘m')}`} sub=${`${fmtDate(a.advance_date)} ${a.note || ''}`} right=${html`<span class=${'pill ' + st[a.status][1]}>${t(st[a.status][0])}</span>`} />`)}</div>`}
+    ${pays.length > 0 && html`<h2>${t('Olingan maoshlar')}</h2><div class="list">${pays.map((a) => html`<${Row} icon="check" tone="ok" title=${`${C.fmt(a.amount)} ${t('so‘m')}`} sub=${`${fmtDate(a.paid_date)} ${a.note || ''}`} />`)}</div>`}
+  <//>`
+}
+
+function More({ go, membership, onLogout }) {
+  const { t } = useT(); const [prof, setProf] = useState(null)
+  useEffect(() => { supabase.from('profiles').select('full_name, phone').maybeSingle().then(({ data }) => setProf(data), () => {}) }, [])
+  return html`<${Page} title=${t('Yana')} sub=${prof && prof.full_name} right=${html`<${SyncBadge} go=${go} />`}>
+    ${prof && html`<div class="card"><div class="muted">${t('Profil')}</div><b>${prof.full_name}</b><span class="muted">${prof.phone}</span>
+      <div class="muted">${t('Kasbingiz')}</div><b>${t((membership.worker_types && membership.worker_types.name) || '')}</b>
+      <div class="muted">${t('Sex')}</div><b>${membership.companies && membership.companies.name}</b></div>`}
+    <div class="list"><${Row} icon="sync" title=${t('Sinxronlash')} sub=${t('Offline ma‘lumotlar holati')} onClick=${() => go('sinx')} /></div>
+    <div class="card"><div class="kv"><span>${t('Til')}</span><${LangSwitch} dark=${true} /></div></div>
+    <button class="btn danger block" onClick=${onLogout}><${Icon} name="logout" size=${18} />${t('Chiqish')}</button>
+  <//>`
 }

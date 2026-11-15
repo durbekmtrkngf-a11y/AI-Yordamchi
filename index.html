@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="theme-color" content="#0a2352" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icon-192.png" />
   <link rel="apple-touch-icon" href="icon-192.png" />
@@ -14,12 +14,20 @@
     "preact": "https://esm.sh/preact@10.24.3",
     "preact/hooks": "https://esm.sh/preact@10.24.3/hooks",
     "htm": "https://esm.sh/htm@3.1.1",
+    "xlsx": "https://esm.sh/xlsx@0.18.5",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.45.4"
   } }
   </script>
 </head>
 <body>
-  <div id="root"><div class="screen center">Yuklanmoqda...</div></div>
+  <div id="root"><div class="center-screen"><span class="muted">Yuklanmoqda...</span></div></div>
+  <script>
+    // Dastur ochilmasa, sababini ekranda ko'rsatadi (ekran rasmini yuborish uchun)
+    addEventListener('error', function (e) {
+      var r = document.getElementById('root');
+      if (r && /Yuklanmoqda/.test(r.textContent)) r.innerHTML = '<div class="center-screen"><b>Xatolik</b><div class="muted">' + (e.message || 'Skript yuklanmadi') + '</div><div class="muted">Internetni tekshirib, sahifani yangilang.</div></div>';
+    }, true);
+  </script>
   <script type="module" src="app.js"></script>
 </body>
 </html>
