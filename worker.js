@@ -1,17 +1,19 @@
 import { useState, useEffect } from 'preact/hooks'
-import { html, useT, useStore, Page, Stat, Row, Icon, Field, MoneyInput, Sheet, Empty, BottomNav, useRoute, LangSwitch, toast, ask, todayStr, fmtDate, downloadFile } from './ui.js'
+import { html, useT, useStore, Page, Stat, Row, Icon, Field, MoneyInput, Sheet, Empty, BottomNav, useRoute, LangSwitch, toast, ask, todayStr, fmtDate, downloadFile, LangSeg } from './ui.js'
 import { supabase } from './lib.js'
 import * as C from './calc.js'
 import { SyncBadge, SyncPage } from './sync-ui.js'
+import { NotifPage, HeaderRight, useNotifyWatcher, unreadCount } from './duty.js'
 
 const NAV = [['bosh', 'home', 'Bosh sahifa'], ['daftar', 'book', 'Ish daftari'], ['avans', 'cash', 'Avans'], ['yana', 'more', 'Yana']]
 
 /** Ishchi kabineti: boshliq kabinetidan alohida interfeys. Server (RLS) faqat o'z ma'lumotini beradi. */
 export function WorkerApp({ membership, onLogout }) {
   const [route, go] = useRoute('bosh')
+  useNotifyWatcher()
   const [name] = route.split('/')
   const p = { go, membership, onLogout }
-  const pages = { daftar: Notebook, avans: Advances, yana: More, sinx: (q) => html`<${SyncPage} back=${() => q.go('yana')} />` }
+  const pages = { daftar: Notebook, avans: Advances, yana: More, bildirish: (q) => html`<${NotifPage} back=${() => q.go('bosh')} />`, sinx: (q) => html`<${SyncPage} back=${() => q.go('yana')} />` }
   const Page_ = pages[name] || Home
   const active = NAV.some((n) => n[0] === name) ? name : name === 'sinx' ? 'yana' : 'bosh'
   return html`<${Page_} ...${p} /><${BottomNav} items=${NAV} route=${active} go=${go} />`
@@ -31,7 +33,13 @@ function Home({ go, membership }) {
   const day = C.workerLedger(D, w.id, today, today); const all = C.workerLedger(D, w.id)
   const returned = C.live(D.work_entries).filter((e) => e.status === 'returned').length
   const reqAdv = C.live(D.advances).filter((a) => a.status === 'requested').length
-  return html`<${Page} title=${w.full_name} sub=${`${company} · ${t(kasb || '')}`} right=${html`<${SyncBadge} go=${go} />`}>
+  const myDuty = C.live(D.duties).filter((d) => d.worker_id === w.id)
+  const dutyToday = myDuty.some((d) => d.duty_date === today)
+  const nextDuty = myDuty.filter((d) => d.duty_date > today).sort((a, b) => (a.duty_date < b.duty_date ? -1 : 1))[0]
+  return html`<${Page} title=${w.full_name} sub=${`${company} · ${t(kasb || '')}`} right=${html`<${HeaderRight} go=${go} />`}>
+    <${LangSeg} />
+    ${dutyToday && html`<div class="msg ok" style="margin-bottom:12px"><b>${t('Bugun siz navbatchisiz')}</b></div>`}
+    ${!dutyToday && nextDuty && html`<div class="msg warn" style="margin-bottom:12px">${t('Keyingi navbatingiz')}: <b>${fmtDate(nextDuty.duty_date)}</b>${nextDuty.note ? ' · ' + nextDuty.note : ''}</div>`}
     ${returned > 0 && html`<button class="msg err" style="width:100%;text-align:left;margin-bottom:12px" onClick=${() => go('daftar')}><b>${returned} ${t('ta ish qaytarilgan')}</b> — ${t('tuzatib qayta kiriting')}</button>`}
     <div class="grid">
       <${Stat} icon="shoe" n=${C.fmt(day.periodPairs)} label=${t('Bugun bajargan ish (juft)')} />
@@ -199,12 +207,14 @@ function Advances({ go }) {
 
 function More({ go, membership, onLogout }) {
   const { t } = useT(); const [prof, setProf] = useState(null)
+  const unread = unreadCount(useStore())
   useEffect(() => { supabase.from('profiles').select('full_name, phone').maybeSingle().then(({ data }) => setProf(data), () => {}) }, [])
   return html`<${Page} title=${t('Yana')} sub=${prof && prof.full_name} right=${html`<${SyncBadge} go=${go} />`}>
     ${prof && html`<div class="card"><div class="muted">${t('Profil')}</div><b>${prof.full_name}</b><span class="muted">${prof.phone}</span>
       <div class="muted">${t('Kasbingiz')}</div><b>${t((membership.worker_types && membership.worker_types.name) || '')}</b>
       <div class="muted">${t('Sex')}</div><b>${membership.companies && membership.companies.name}</b></div>`}
-    <div class="list"><${Row} icon="sync" title=${t('Sinxronlash')} sub=${t('Offline ma‘lumotlar holati')} onClick=${() => go('sinx')} /></div>
+    <div class="list"><${Row} icon="bell" title=${t('Bildirishnomalar')} sub=${t('Navbatchilik va boshqa xabarlar')} right=${unread > 0 ? html`<span class="pill amber">${unread}</span>` : null} onClick=${() => go('bildirish')} />
+      <${Row} icon="sync" title=${t('Sinxronlash')} sub=${t('Offline ma‘lumotlar holati')} onClick=${() => go('sinx')} /></div>
     <div class="card"><div class="kv"><span>${t('Til')}</span><${LangSwitch} dark=${true} /></div></div>
     <button class="btn danger block" onClick=${onLogout}><${Icon} name="logout" size=${18} />${t('Chiqish')}</button>
   <//>`

@@ -205,3 +205,30 @@ export function partnerBalance(data, partnerId) {
 }
 
 export const fmt = (n) => Math.round(Number(n) || 0).toLocaleString('ru-RU').replace(/\u00a0/g, ' ')
+
+/* ---------- oylik hisobot: sexdan chiqqan kunlik ishlar yig'indisi ----------
+   Har kuni production() hisoblangan; shularning oy bo'yicha yig'indisi model kesimida.
+   Tannarx ish haqi va boshqa xarajatlarni o'z ichiga oladi, shuning uchun foyda = sotuv - tannarx
+   (ish haqi qayta ayirilmaydi). */
+export function monthReport(data, from, to) {
+  const models = new Map(); const days = []; let wages = 0
+  for (let d = from; d <= to; d = addDays(d, 1)) {
+    const p = production(data, d)
+    wages += p.wages
+    if (!p.pairs) continue
+    days.push({ date: d, pairs: p.pairs, byModel: Object.fromEntries(p.rows.map((r) => [r.modelId, r.pairs])) })
+    for (const r of p.rows) {
+      const a = models.get(r.modelId) || { modelId: r.modelId, code: r.code, pairs: 0, sale: 0, cost: 0, missing: 0 }
+      a.pairs += r.pairs
+      if (r.cost === null) a.missing += r.pairs
+      else { a.sale += r.sale; a.cost += r.cost }
+      models.set(r.modelId, a)
+    }
+  }
+  const rows = [...models.values()].map((a) => {
+    const known = a.pairs - a.missing
+    return { ...a, profit: a.sale - a.cost, unit: known > 0 ? Math.round(a.sale / known) : 0 }
+  }).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
+  const pairs = sum(rows, (r) => r.pairs), sale = sum(rows, (r) => r.sale), cost = sum(rows, (r) => r.cost)
+  return { rows, days, pairs, sale, cost, profit: sale - cost, wages, missing: sum(rows, (r) => r.missing) }
+}

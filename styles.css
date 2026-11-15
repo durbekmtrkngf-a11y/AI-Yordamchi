@@ -132,3 +132,33 @@ table.grid-t { border-collapse:separate; border-spacing:0; width:max-content; mi
 .grid-t tr.today td, .grid-t tr.today td:first-child { background:#dff5ec; }
 .grid-t td.tapc { cursor:pointer; } .grid-t tfoot td { font-weight:800; background:#f1f5f9; border-top:2px solid var(--line); }
 .fform { display:flex; flex-direction:column; gap:12px; } .rbtns { display:flex; gap:6px; align-items:center; }
+
+.hr { display:flex; gap:8px; align-items:center; } .bell { position:relative; }
+.bell .cnt { position:absolute; top:-4px; right:-4px; min-width:18px; height:18px; padding:0 4px; border-radius:9px; background:#ef4444; color:#fff; font-size:11px; font-weight:800; display:grid; place-items:center; }
+
+/* ---- jadval chiziqlari ---- */
+.table-wrap { border:1px solid #b6c2d4; }
+.grid-t th, .grid-t td { border-right:1px solid #b6c2d4; border-bottom:1px solid #b6c2d4; }
+.grid-t th { border-color:#3a5a8c; } .grid-t th:last-child, .grid-t td:last-child { border-right:0; }
+.grid-t tbody tr:last-child td { border-bottom:0; }
+/* ---- ishchi daftari: kichikroq katak ---- */
+.cellin { width:60px; height:42px; font-size:19px; border-radius:11px; }
+.grid-t.cells td.cin { padding:4px 3px; } .grid-t.cells th, .grid-t.cells td { padding:6px 6px; }
+.grid-t td.dcol { font-size:13px; }
+/* ---- bosh sahifa: bo'limlar ---- */
+.tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:6px 0 14px; }
+.tile { background:#fff; border-radius:18px; padding:14px 6px; display:flex; flex-direction:column; align-items:center; gap:8px; font-size:13px; font-weight:700; color:var(--navy); box-shadow:var(--shadow); text-align:center; line-height:1.2; }
+.tile:active { transform:scale(.97); }
+.tile .ti { width:46px; height:46px; border-radius:14px; background:var(--blue-soft); display:grid; place-items:center; }
+.langseg { display:flex; background:#e2e8f0; border-radius:12px; padding:3px; margin-bottom:12px; }
+.langseg button { flex:1; background:transparent; border-radius:10px; padding:8px; font-weight:700; color:#475569; }
+.langseg button.on { background:#fff; color:var(--navy); box-shadow:var(--shadow); }
+.monthbar { display:flex; align-items:center; justify-content:space-between; background:#fff; border-radius:16px; padding:8px 10px; margin-bottom:12px; box-shadow:var(--shadow); font-size:17px; }
+/* ---- xarajat: markazdagi + tugma va ko'p mahsulotli shablon ---- */
+.fab.center { left:50%; right:auto; transform:translateX(-50%); width:auto; height:54px; padding:0 22px; border-radius:27px; display:flex; align-items:center; gap:8px; font-weight:800; font-size:16px; white-space:nowrap; }
+.xrow { display:grid; grid-template-columns:minmax(0,1fr) 72px 108px; gap:6px; align-items:center; }
+.xrow input { padding:10px 8px; font-size:15px; min-width:0; } .xhead { font-size:12px; color:var(--muted); font-weight:700; }
+.xn { display:flex; align-items:center; gap:2px; font-weight:700; font-size:14px; min-width:0; }
+.xdel { background:none; border:0; color:#94a3b8; font-size:20px; padding:0 4px; line-height:1; }
+.xadd { display:flex; gap:8px; } .xadd input { flex:1; }
+.xtotal { display:flex; justify-content:space-between; align-items:center; font-size:18px; padding:12px 14px; background:var(--blue-soft); border-radius:14px; }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks'
-import { html, useT, useStore, Page, Stat, Row, Icon, BottomNav, useRoute, PasswordInput, LangSwitch, toast, todayStr, fmtDate, Empty } from './ui.js'
+import { html, useT, useStore, Page, Stat, Row, Icon, BottomNav, useRoute, PasswordInput, LangSwitch, toast, todayStr, fmtDate, Empty, LangSeg } from './ui.js'
 import { supabase, friendlyError } from './lib.js'
 import * as C from './calc.js'
 import { SyncBadge, SyncPage } from './sync-ui.js'
@@ -8,24 +8,35 @@ import { ModelsPage, ValuesPage } from './b-catalog.js'
 import { ExpensesPage, ClientsPage, FinancePage } from './b-money.js'
 import { PartnersPage, RentPage } from './b-partner.js'
 import { BackupPage } from './b-backup.js'
+import { MonthPage } from './b-month.js'
+import { DutyPage, NotifPage, HeaderRight, useNotifyWatcher, unreadCount } from './duty.js'
 
 const NAV = [
   ['bosh', 'home', 'Bosh sahifa'], ['ishchilar', 'users', 'Ishchilar'], ['xarajat', 'wallet', 'Xarajatlar'],
-  ['klient', 'user', 'Klientlar'], ['model', 'shoe', 'Modellar'], ['hamkor', 'partner', 'Hamkor'],
-  ['ijara', 'building', 'Ijara'], ['qiymat', 'tag', 'Qiymatlar'], ['yana', 'more', 'Yana'],
+  ['model', 'shoe', 'Modellar'], ['yana', 'more', 'Yana'],
 ]
-const PARENT = { ishchi: 'ishchilar', tasdiq: 'ishchilar', kasb: 'bosh', ishlab: 'bosh', hisobot: 'yana', zaxira: 'yana', sinx: 'yana' }
+/** Bosh sahifadagi bo'limlar (jadvaldan keyin, butun kenglikda ustunlar bo'lib) */
+const TILES = [
+  ['ishchilar', 'users', 'Ishchilar'], ['navbat', 'bell', 'Navbatchi'], ['xarajat', 'wallet', 'Xarajatlar'],
+  ['klient', 'user', 'Klientlar'], ['model', 'shoe', 'Modellar'], ['hamkor', 'partner', 'Hamkor'],
+  ['ijara', 'building', 'Ijara'], ['qiymat', 'tag', 'Qiymatlar'], ['oylik', 'chart', 'Oylik hisobot'],
+  ['hisobot', 'trend', 'Moliyaviy hisobot'], ['zaxira', 'shield', 'Zaxira nusxa'], ['yana', 'more', 'Yana'],
+]
+const PARENT = { bildirish: 'yana', ishchi: 'ishchilar', tasdiq: 'ishchilar', kasb: 'bosh', ishlab: 'bosh', hisobot: 'yana', zaxira: 'yana', sinx: 'yana',
+  navbat: 'bosh', klient: 'bosh', hamkor: 'bosh', ijara: 'bosh', qiymat: 'bosh', oylik: 'bosh' }
 const KASB_ORDER = ['kosib', 'zakatofkachi', 'kroychik', 'pardozchi']
 
 /** Boshliq kabineti: pastki navigatsiya + hamma bo'limlar */
 export function BossApp({ membership, onLogout }) {
   const [route, go] = useRoute('bosh')
+  useNotifyWatcher()
   const [name, arg] = route.split('/')
   const p = { go, membership, arg, onLogout }
   const pages = {
     ishchilar: WorkersPage, ishchi: WorkerPage, kasb: KasbPage, tasdiq: ApprovalsPage, ishlab: ProductionPage,
     xarajat: ExpensesPage, klient: ClientsPage, hisobot: FinancePage, model: ModelsPage, qiymat: ValuesPage,
-    hamkor: PartnersPage, ijara: RentPage, zaxira: BackupPage, yana: More,
+    hamkor: PartnersPage, ijara: RentPage, zaxira: BackupPage, yana: More, navbat: DutyPage,
+    bildirish: (q) => html`<${NotifPage} back=${() => q.go('yana')} />`, oylik: MonthPage,
     sinx: (q) => html`<${SyncPage} back=${() => q.go('yana')} />`,
   }
   const Page_ = pages[name] || Home
@@ -44,7 +55,8 @@ function Home({ go, membership }) {
   const cols = C.live(D.models).filter((m) => m.is_active || used.has(m.id)).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
   const shown = per.filter((x) => x.p.pairs > 0 || x.d === today).slice(0, 14)
   const todayP = per[0].p
-  return html`<${Page} title=${company} sub=${fmtDate(today)} right=${html`<${SyncBadge} go=${go} />`}>
+  return html`<${Page} title=${company} sub=${fmtDate(today)} right=${html`<${HeaderRight} go=${go} />`}>
+    <${LangSeg} />
     <button class="prod-card" onClick=${() => go('ishlab')}>
       <span class="cap">${t('Bugun chiqqan ish')}</span>
       <span class="big">${C.fmt(todayP.pairs)} ${t('juft')}</span>
@@ -56,11 +68,14 @@ function Home({ go, membership }) {
           ${cols.map((m) => { const r = p.rows.find((x) => x.modelId === m.id); return html`<td class=${r ? 'has' : 'zero'}>${r ? r.pairs : '·'}</td>` })}
           <td class=${p.pairs ? 'has' : 'zero'}>${p.pairs || '·'}</td></tr>`)}</tbody></table></div>
       <p class="muted small">${t('Kosiblar bajargan ishlar (qaytarilganlar hisobga olinmaydi). Batafsil ma‘lumot bo‘limlar ichida.')}</p>`}
+    <h2>${t('Bo‘limlar')}</h2>
+    <div class="tiles">${TILES.map(([id, ic, label]) => html`<button class="tile" onClick=${() => go(id)}><span class="ti"><${Icon} name=${ic} size=${26} /></span><span>${t(label)}</span></button>`)}</div>
   <//>`
 }
 
 function More({ go, membership, onLogout }) {
   const { t } = useT()
+  const unread = unreadCount(useStore())
   const code = (membership.companies && membership.companies.invite_code) || ''
   const link = `${location.origin}${location.pathname}?kod=${code}`
   const [prof, setProf] = useState(null)
@@ -85,6 +100,7 @@ function More({ go, membership, onLogout }) {
     </div>
     <div class="list">
       <${Row} icon="chart" title=${t('Moliyaviy hisobot')} sub=${t('Tushum, foyda, naqd pul, qarzlar')} onClick=${() => go('hisobot')} />
+      <${Row} icon="bell" title=${t('Bildirishnomalar')} sub=${t('Yangi xabarlar')} right=${unread > 0 ? html`<span class="pill amber">${unread}</span>` : null} onClick=${() => go('bildirish')} />
       <${Row} icon="check" title=${t('Ishlarni tasdiqlash')} sub=${t('Ishchilar kiritgan ishlar')} onClick=${() => go('tasdiq')} />
       <${Row} icon="sync" title=${t('Sinxronlash')} sub=${t('Offline ma‘lumotlar va ziddiyatlar')} onClick=${() => go('sinx')} />
       <${Row} icon="shield" title=${t('Zaxira nusxa')} sub=${t('Saqlash, tiklash, Excel va CSV')} onClick=${() => go('zaxira')} />

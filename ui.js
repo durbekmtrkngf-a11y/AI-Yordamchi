@@ -15,6 +15,12 @@ export function LangProvider({ children }) {
   const t = (s) => (lang === 'cyr' ? toCyr(String(s)) : s)
   return html`<${LangCtx.Provider} value=${{ lang, setLang, t }}>${children}<//>`
 }
+/** Lotin / Kirill tanlovi (bosh sahifada) */
+export function LangSeg() {
+  const { lang, setLang } = useT()
+  return html`<div class="langseg"><button class=${lang === 'lat' ? 'on' : ''} onClick=${() => setLang('lat')}>Lotin</button><button class=${lang === 'cyr' ? 'on' : ''} onClick=${() => setLang('cyr')}>Кирилл</button></div>`
+}
+
 export function LangSwitch({ dark }) {
   const { lang, setLang } = useT()
   return html`<button class=${'chip-btn' + (dark ? ' dark' : '')} onClick=${() => setLang(lang === 'lat' ? 'cyr' : 'lat')}>
@@ -60,6 +66,7 @@ const P = {
   globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/>',
   receipt: '<path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2z"/><path d="M8 7h8M8 11h8M8 15h5"/>',
   factory: '<path d="M2 21V9l7 4V9l7 4V4h4v17z"/><path d="M6 17h.01M10 17h.01M14 17h.01M18 17h.01"/>',
+  bell: '<path d="M6 8a6 6 0 0112 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 003.4 0"/>',
   clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   trend: '<path d="m22 7-8.5 8.5-5-5L2 17"/><path d="M16 7h6v6"/>',
 }

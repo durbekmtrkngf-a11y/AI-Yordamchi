@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'preact/hooks'
+import { exportPDF, tbl, kv, h2, note } from './pdf.js'
 import { html, useT, useStore, Page, Stat, Row, Chips, Icon, Field, MoneyInput, Sheet, Empty, toast, ask, todayStr, fmtDate } from './ui.js'
 import { supabase, friendlyError } from './lib.js'
 import * as C from './calc.js'
@@ -84,6 +85,24 @@ export function WorkerPage({ arg, go }) {
   const net = l.periodEarned - pAdv - pDebt - pPaid
   const editing = edit ? (C.live(D.work_entries).find((x) => x.id === edit.id) || edit) : null
 
+  const typeRow = (D.worker_types || []).find((x) => x.id === w.worker_type_id)
+  const pdf = () => exportPDF({
+    t, title: `${t('Ishchi hisob varag‘i')}: ${w.full_name}`,
+    sub: `${t((typeRow && typeRow.name) || '')} · ${fmtDate(from)} — ${fmtDate(to)}`,
+    filename: `hisob-${w.full_name.replace(/\s+/g, '-')}-${to}.pdf`,
+    body: h2(t('Ishlar jadvali')) + tbl(
+      [t('Sana'), ...mids.map((m) => mcode(D, m)), t('Jami')],
+      dates.map((d) => {
+        const day = mids.map((m) => cells.get(d + '|' + m))
+        return [fmtDate(d).slice(0, 5), ...day.map((e) => (e ? e.pairs + (e.status === 'pending' ? '*' : e.status === 'returned' ? '!' : '') : '')), C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs) || '']
+      }),
+      [[t('Juft'), ...mids.map((m) => colPairs(m)), l.periodPairs], [t('So‘m'), ...mids.map((m) => C.fmt(colMoney(m))), C.fmt(l.periodEarned)]]) +
+      note(t('* tasdiqlanmagan, ! qaytarilgan (hisobga olinmaydi)')) +
+      h2(t('Hisob-kitob')) + kv([
+        [t('Ish soni (juft)'), C.fmt(l.periodPairs)], [t('Hisoblangan ish haqi'), C.fmt(l.periodEarned)],
+        ['− ' + t('Avans'), C.fmt(pAdv)], ['− ' + t('Qarz'), C.fmt(pDebt)], ['− ' + t('To‘langan'), C.fmt(pPaid)],
+        [t('Shu davr bo‘yicha qoladi'), C.fmt(net) + ' ' + t('so‘m'), true]]),
+  })
   async function returnEntry(e) {
     const r = await ask(t('Ish tuzatish uchun qaytarilsinmi? Ishchi uni qayta kiritadi.'), { input: t('Sabab (ixtiyoriy)'), danger: true, options: [{ value: true, label: t('Qaytarish'), tone: 'danger' }] })
     if (r) { S.patch('work_entries', e.id, { status: 'returned', return_note: r.text || '' }); toast(t('Qaytarildi')) }
@@ -131,7 +150,8 @@ export function WorkerPage({ arg, go }) {
         <tfoot><tr><td>${t('Juft')}</td>${mids.map((m) => html`<td>${C.fmt(colPairs(m))}</td>`)}<td>${C.fmt(l.periodPairs)}</td></tr>
           <tr><td>${t('So‘m')}</td>${mids.map((m) => html`<td>${C.fmt(colMoney(m))}</td>`)}<td>${C.fmt(l.periodEarned)}</td></tr></tfoot></table></div>
       <p class="muted small"><span class="dot" style="background:#f59e0b"></span> ${t('Sariq: tasdiqlanmagan')} · <span class="dot" style="background:var(--red)"></span> ${t('Qizil: qaytarilgan')} · ${t('Katakni bossangiz tasdiqlash, tuzatish yoki qaytarish oynasi ochiladi.')}</p>`}
-    <button class="btn block" style="margin-bottom:12px" onClick=${() => setShowCalc(!showCalc)}><${Icon} name="chart" size=${18} />${t('Hisoblash')}</button>
+    <div class="two" style="margin-bottom:12px"><button class="btn" onClick=${() => setShowCalc(!showCalc)}><${Icon} name="chart" size=${18} />${t('Hisoblash')}</button>
+      <button class="btn primary" onClick=${pdf}><${Icon} name="download" size=${18} />${t('PDF')}</button></div>
     ${showCalc && html`<div class="card">
       <div class="muted small">${fmtDate(from)} — ${fmtDate(to)}</div>
       <div class="kv"><span>${t('Ish soni (juft)')}</span><b>${C.fmt(l.periodPairs)}</b></div>

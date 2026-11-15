@@ -2,6 +2,10 @@ import { useState } from 'preact/hooks'
 import { html, useT, useStore, Page, Stat, Row, Chips, Icon, Field, MoneyInput, Sheet, Empty, toast, ask, todayStr, fmtDate } from './ui.js'
 import * as C from './calc.js'
 
+const TPL_KEY = 'seh_exp_tpl'
+const DEFAULT_TPL = ['Charm', 'Yelim', 'Ip', 'Taglik', 'Astar', 'Pona', 'Elektr energiyasi', 'Transport', 'Ovqatlanish']
+const loadTpl = () => { try { const v = JSON.parse(localStorage.getItem(TPL_KEY) || 'null'); if (Array.isArray(v) && v.length) return v } catch (_) {} return DEFAULT_TPL }
+const saveTpl = (a) => { try { localStorage.setItem(TPL_KEY, JSON.stringify(a)) } catch (_) {} }
 const CATS = ['Xomashyo', 'Charm', 'Yelim', 'Ip', 'Taglik', 'Elektr energiyasi', 'Transport', 'Ta‘mirlash', 'Ovqatlanish', 'Boshqa xarajatlar']
 
 /* ===================== Xarajatlar ===================== */
@@ -16,8 +20,7 @@ export function ExpensesPage() {
   const list = all.filter((x) => C.inRange(x.expense_date, from, to) && (cat === 'all' || x.category === cat) &&
     (!q || (x.title + ' ' + x.note).toLowerCase().includes(q.toLowerCase()))).sort((a, b) => (a.expense_date < b.expense_date ? 1 : -1))
   const todayTotal = C.sum(all.filter((x) => x.expense_date === today), (x) => x.amount)
-  return html`<${Page} title=${t('Xarajatlar')} sub=${fmtDate(today)} right=${html`<button class="icon-btn light" onClick=${() => setSheet({})}><${Icon} name="plus" /></button>`}
-    hero=${html`<div style="margin-top:14px"><div style="font-size:13px;opacity:.8">${t('Bugungi xarajat')}</div><div style="font-size:28px;font-weight:800">${C.fmt(todayTotal)} ${t('so‘m')}</div></div>`}>
+  return html`<${Page} title=${t('Xarajatlar')} sub=${fmtDate(today)} hero=${html`<div style="margin-top:14px"><div style="font-size:13px;opacity:.8">${t('Bugungi xarajat')}</div><div style="font-size:28px;font-weight:800">${C.fmt(todayTotal)} ${t('so‘m')}</div></div>`}>
     <${Chips} value=${period} onChange=${(v) => { setPeriod(v); setDay('') }} items=${[['today', t('Bugun')], ['week', t('Hafta')], ['month', t('Oy')], ['all', t('Hammasi')]]} />
     <div class="datebar"><${Icon} name="calendar" size=${20} /><input type="date" value=${day} onInput=${(e) => setDay(e.target.value)} />${day && html`<button class="btn sm" onClick=${() => setDay('')}>${t('Tozalash')}</button>`}</div>
     <div class="search"><${Icon} name="search" size=${18} /><input placeholder=${t('Qidirish')} value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
@@ -26,7 +29,64 @@ export function ExpensesPage() {
     ${list.length === 0 && html`<${Empty} icon="wallet" text=${t('Xarajat topilmadi')} />`}
     <div class="list">${list.map((x) => html`<${Row} icon="receipt" title=${x.title} sub=${`${t(x.category)} · ${fmtDate(x.expense_date)} · ${x.pay_method === 'card' ? t('Karta') : t('Naqd')}`}
       right=${C.fmt(x.amount)} onClick=${() => setSheet(x)} />`)}</div>
-    ${sheet && html`<${ExpenseSheet} item=${sheet.id ? sheet : null} onClose=${() => setSheet(null)} />`}
+    <div style="height:72px"></div>
+    <button class="fab center" onClick=${() => setSheet({ bulk: true })}><${Icon} name="plus" size=${22} /><span>${t('Xarajat qo‘shish')}</span></button>
+    ${sheet && sheet.bulk && html`<${BulkExpenseSheet} onClose=${() => setSheet(null)} onSingle=${() => setSheet({ single: true })} />`}
+    ${sheet && !sheet.bulk && html`<${ExpenseSheet} item=${sheet.id ? sheet : null} onClose=${() => setSheet(null)} />`}
+  <//>`
+}
+
+/** Bir marta bosib, hamma xomashyoni birdan kiritish: tayyor shablon (nomi, miqdori, summasi) */
+export function BulkExpenseSheet({ onClose, onSingle }) {
+  const { t } = useT(); const S = useStore()
+  const [tpl, setTpl] = useState(loadTpl)
+  const [vals, setVals] = useState({})
+  const [date, setDate] = useState(todayStr()); const [method, setMethod] = useState('cash')
+  const [extra, setExtra] = useState('')
+  const get = (n) => vals[n] || {}
+  const set = (n, k, v) => setVals({ ...vals, [n]: { ...get(n), [k]: v } })
+  const filled = tpl.filter((n) => Number(get(n).amount) > 0)
+  const total = C.sum(filled, (n) => Number(get(n).amount))
+  function addItem() {
+    const n = extra.trim(); if (!n) return
+    if (!tpl.includes(n)) { const nt = [...tpl, n]; setTpl(nt); saveTpl(nt) }
+    setExtra('')
+  }
+  function removeItem(n) { const nt = tpl.filter((x) => x !== n); setTpl(nt); saveTpl(nt) }
+  function keys(e) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    if (e.target.dataset && e.target.dataset.extra) return addItem()
+    const els = [...e.currentTarget.querySelectorAll('input,select')]
+    const nx = els[els.indexOf(e.target) + 1]
+    if (nx) nx.focus()
+  }
+  function save(e) {
+    e.preventDefault()
+    if (!filled.length) return toast(t('Kamida bitta mahsulot summasini kiriting'), 'err')
+    for (const n of filled) {
+      const v = get(n)
+      S.save('expenses', { title: n, category: CATS.includes(n) ? n : 'Xomashyo', amount: Number(v.amount), expense_date: date, note: (v.qty || '').trim(), pay_method: method })
+    }
+    toast(`${filled.length} ${t('ta xarajat saqlandi')}`); onClose()
+  }
+  return html`<${Sheet} title=${t('Xarajat qo‘shish')} onClose=${onClose}>
+    <form class="fform" onSubmit=${save} onKeyDown=${keys}>
+      <div class="two"><${Field} label=${t('Sana')}><input type="date" value=${date} onInput=${(e) => setDate(e.target.value)} /><//>
+        <${Field} label=${t('To‘lov turi')}><select value=${method} onChange=${(e) => setMethod(e.target.value)}><option value="cash">${t('Naqd')}</option><option value="card">${t('Karta')}</option></select><//></div>
+      <p class="muted small">${t('Olgan narsalaringizning miqdori va summasini yozing. Bo‘sh qoldirilganlar saqlanmaydi.')}</p>
+      <div class="xrow xhead"><span>${t('Mahsulot')}</span><span>${t('Miqdor')}</span><span>${t('Summa')}</span></div>
+      ${tpl.map((n) => html`<div class="xrow" key=${n}>
+        <span class="xn">${t(n)}<button type="button" class="xdel" onClick=${() => removeItem(n)}>×</button></span>
+        <input class="xq" enterkeyhint="next" placeholder=${t('5 kg')} value=${get(n).qty || ''} onInput=${(e) => set(n, 'qty', e.target.value)} />
+        <${MoneyInput} value=${get(n).amount || ''} onChange=${(v) => set(n, 'amount', v)} />
+      </div>`)}
+      <div class="xadd"><input data-extra="1" enterkeyhint="done" placeholder=${t('Boshqa mahsulot nomi')} value=${extra} onInput=${(e) => setExtra(e.target.value)} />
+        <button type="button" class="btn" onClick=${addItem}><${Icon} name="plus" size=${18} /></button></div>
+      <div class="xtotal"><span>${t('Jami')}</span><b>${C.fmt(total)} ${t('so‘m')}</b></div>
+      <button type="submit" class="btn primary block">${t('Saqlash')}${filled.length ? ` (${filled.length})` : ''}</button>
+      <button type="button" class="btn block" onClick=${onSingle}>${t('Bitta xarajat (qo‘lda)')}</button>
+    </form>
   <//>`
 }
 
