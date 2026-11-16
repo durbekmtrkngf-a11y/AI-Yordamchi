@@ -33,13 +33,13 @@ function Home({ go, membership }) {
   const day = C.workerLedger(D, w.id, today, today); const all = C.workerLedger(D, w.id)
   const returned = C.live(D.work_entries).filter((e) => e.status === 'returned').length
   const reqAdv = C.live(D.advances).filter((a) => a.status === 'requested').length
-  const myDuty = C.live(D.duties).filter((d) => d.worker_id === w.id)
+  const myDuty = C.live(D.duties).filter((d) => d.worker_id === w.id && d.status !== 'absent')
   const dutyToday = myDuty.some((d) => d.duty_date === today)
   const nextDuty = myDuty.filter((d) => d.duty_date > today).sort((a, b) => (a.duty_date < b.duty_date ? -1 : 1))[0]
   return html`<${Page} title=${w.full_name} sub=${`${company} · ${t(kasb || '')}`} right=${html`<${HeaderRight} go=${go} />`}>
     <${LangSeg} />
     ${dutyToday && html`<div class="msg ok" style="margin-bottom:12px"><b>${t('Bugun siz navbatchisiz')}</b></div>`}
-    ${!dutyToday && nextDuty && html`<div class="msg warn" style="margin-bottom:12px">${t('Keyingi navbatingiz')}: <b>${fmtDate(nextDuty.duty_date)}</b>${nextDuty.note ? ' · ' + nextDuty.note : ''}</div>`}
+    ${!dutyToday && nextDuty && html`<div class="msg warn" style="margin-bottom:12px">${t('Keyingi navbatingiz')}: <b>${fmtDate(nextDuty.duty_date)}</b> (${t(['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'][new Date(nextDuty.duty_date + 'T12:00:00').getDay()])})${nextDuty.note ? ' · ' + nextDuty.note : ''}</div>`}
     ${returned > 0 && html`<button class="msg err" style="width:100%;text-align:left;margin-bottom:12px" onClick=${() => go('daftar')}><b>${returned} ${t('ta ish qaytarilgan')}</b> — ${t('tuzatib qayta kiriting')}</button>`}
     <div class="grid">
       <${Stat} icon="shoe" n=${C.fmt(day.periodPairs)} label=${t('Bugun bajargan ish (juft)')} />

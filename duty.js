@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'preact/hooks'
 import { html, useT, useStore, Page, Row, Icon, Field, Empty, toast, ask, todayStr, fmtDate } from './ui.js'
 import * as C from './calc.js'
 import { SyncBadge } from './sync-ui.js'
+import * as DC from './duty-calc.js'
 
 /* ===================== Bildirishnomalar (ilova ichida) ===================== */
 const mine = (S) => {
@@ -60,46 +61,89 @@ export function NotifPage({ back }) {
   <//>`
 }
 
-/* ===================== Navbatchi (boshliq) ===================== */
+/* ===================== Navbatchi: aylanma tartib (boshliq) ===================== */
+const WD = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba']
+const wd = (iso) => WD[new Date(iso + 'T12:00:00').getDay()]
+const asc = (a, b) => (a.duty_date < b.duty_date ? -1 : a.duty_date > b.duty_date ? 1 : 0)
+
+const rosterOf = (D) => {
+  const ws = (D.workers || []).filter((w) => !w.deleted_at)
+  const rows = C.live(D.duty_roster).filter((r) => ws.some((w) => w.id === r.worker_id)).sort((a, b) => a.position - b.position)
+  return { rows, ids: rows.map((r) => r.worker_id), workers: ws }
+}
+
+/** Boshliq ilovasi ochilganda: navbat jadvali keyingi 3 hafta uchun o'zi to'ldiriladi va ishchilarga sanasi bilan xabar boradi */
+export function useDutyAutofill() {
+  const S = useStore(); const D = S.all(); const st = S.status(); const today = todayStr()
+  const { ids } = rosterOf(D)
+  const duties = C.live(D.duties)
+  const sig = JSON.stringify([today, ids, duties.map((d) => [d.id, d.worker_id, d.duty_date, d.status])])
+  useEffect(() => {
+    if (!st.loaded || st.syncing || ids.length === 0) return
+    const p = DC.ensurePlan({ roster: ids, duties, today, horizon: 21 })
+    p.patch.forEach((x) => S.patch('duties', x.id, x.fields))
+    p.archive.forEach((id) => S.archive('duties', id))
+    p.create.forEach((r) => S.save('duties', r))
+  }, [sig, st.loaded, st.syncing])
+}
+
 export function DutyPage({ go }) {
   const { t } = useT(); const S = useStore(); const D = S.all(); const today = todayStr()
-  const workers = (D.workers || []).filter((w) => !w.deleted_at).sort((a, b) => a.full_name.localeCompare(b.full_name))
-  const duties = C.live(D.duties)
+  const { rows, ids, workers } = rosterOf(D)
   const nameOf = (id) => ((D.workers || []).find((w) => w.id === id) || {}).full_name || '?'
-  const [date, setDate] = useState(today); const [wid, setWid] = useState(''); const [note, setNote] = useState('')
-  const todayList = duties.filter((d) => d.duty_date === today)
-  const upcoming = duties.filter((d) => d.duty_date > today).sort((a, b) => (a.duty_date < b.duty_date ? -1 : 1))
-  const past = duties.filter((d) => d.duty_date < today).sort((a, b) => (a.duty_date < b.duty_date ? 1 : -1)).slice(0, 15)
+  const duties = C.live(D.duties)
+  const active = duties.filter((d) => d.status !== 'absent')
+  const todayRow = active.find((d) => d.duty_date === today)
+  const upcoming = active.filter((d) => d.duty_date > today).sort(asc).slice(0, 10)
+  const history = duties.filter((d) => d.duty_date < today || (d.duty_date === today && d.status === 'absent'))
+    .sort((a, b) => asc(b, a)).slice(0, 15)
+  const notIn = workers.filter((w) => !ids.includes(w.id)).sort((a, b) => a.full_name.localeCompare(b.full_name))
+  const [startWorker, setStartWorker] = useState(''); const [startDate, setStartDate] = useState(today)
+  const needsStart = ids.length > 0 && active.length === 0
 
-  function add(e) {
-    e.preventDefault()
-    if (!wid) return toast(t('Ishchini tanlang'), 'err')
-    if (!date) return toast(t('Sanani tanlang'), 'err')
-    if (duties.some((d) => d.worker_id === wid && d.duty_date === date)) return toast(t('Bu ishchi shu kunga allaqachon navbatchi'), 'err')
-    S.save('duties', { worker_id: wid, duty_date: date, note: note.trim() })
-    toast(t('Navbatchi tayinlandi. Ishchiga bildirishnoma boradi.')); setNote('')
+  const addToRoster = (list) => { let pos = rows.length ? Math.max(...rows.map((r) => r.position)) + 1 : 0; list.forEach((w) => S.save('duty_roster', { worker_id: w.id, position: pos++ })) }
+  const removeFromRoster = async (r) => { if (await ask(t('Ishchi navbat tartibidan chiqarilsinmi? Kelgusi navbatlar qayta hisoblanadi.'), { danger: true })) S.archive('duty_roster', r.id) }
+  const move = (r, dir) => DC.moveInRoster(rows, r.id, dir).forEach((x) => S.patch('duty_roster', x.id, { position: x.position }))
+  function start() {
+    const w = startWorker || ids[0]
+    if (!w || !startDate) return toast(t('Ishchini tanlang'), 'err')
+    S.save('duties', { worker_id: w, duty_date: startDate, status: 'planned', note: '' })
+    toast(t('Navbat boshlandi. Keyingilar sanasi bilan avtomatik yoziladi.'))
   }
-  async function remove(d) {
-    if (await ask(t('Navbatchilik bekor qilinsinmi?'), { danger: true })) S.archive('duties', d.id)
+  async function absent(d) {
+    const repl = DC.absentReplacement({ roster: ids, duties, duty: d })
+    if (!repl) return toast(t('Almashtiradigan boshqa ishchi yo‘q'), 'err')
+    if (!(await ask(`${nameOf(d.worker_id)} ${t('kelmadimi?')} ${t('Navbat')} ${nameOf(repl)} ${t('ga o‘tadi')}.`, { danger: true }))) return
+    S.patch('duties', d.id, { status: 'absent' })
+    S.save('duties', { worker_id: repl, duty_date: d.duty_date, status: 'planned', note: 'Kelmagan o‘rniga' })
+    toast(`${nameOf(repl)} ${t('navbatchi bo‘ldi')}`)
   }
-  const item = (d) => html`<${Row} icon="shield" title=${nameOf(d.worker_id)} sub=${`${fmtDate(d.duty_date)}${d.note ? ' · ' + d.note : ''}`}
-    right=${html`<button class="btn sm ghost" onClick=${() => remove(d)}><${Icon} name="archive" size=${16} /></button>`} />`
+  const absentBtn = (d) => html`<button class="btn sm danger" onClick=${() => absent(d)}>${t('Kelmadi')}</button>`
 
   return html`<${Page} title=${t('Navbatchi')} sub=${fmtDate(today)} right=${html`<${HeaderRight} go=${go} />`}>
-    <div class=${'card ' + (todayList.length ? '' : 'flat')}>
-      <div class="muted">${t('Bugungi navbatchi')}</div>
-      ${todayList.length ? todayList.map((d) => html`<b>${nameOf(d.worker_id)}${d.note ? ' · ' + d.note : ''}</b>`) : html`<b>${t('Bugun navbatchi tayinlanmagan')}</b>`}
-    </div>
-    <form class="card fform" onSubmit=${add}>
-      <b>${t('Navbatchi tayinlash')}</b>
-      <${Field} label=${t('Ishchi')}><select value=${wid} onChange=${(e) => setWid(e.target.value)}>
-        <option value="">${t('Tanlang')}</option>${workers.map((w) => html`<option value=${w.id}>${w.full_name}</option>`)}</select><//>
-      <${Field} label=${t('Sana')}><input type="date" value=${date} onInput=${(e) => setDate(e.target.value)} /><//>
-      <${Field} label=${t('Izoh (ixtiyoriy)')}><input enterkeyhint="go" value=${note} onInput=${(e) => setNote(e.target.value)} placeholder=${t('Masalan: sexni tozalash')} /><//>
-      <button type="submit" class="btn primary block"><${Icon} name="bell" size=${18} />${t('Tayinlash va xabar yuborish')}</button>
-    </form>
-    ${upcoming.length > 0 && html`<h2>${t('Kelgusi navbatlar')}</h2><div class="list">${upcoming.map(item)}</div>`}
-    ${todayList.length > 0 && html`<h2>${t('Bugun')}</h2><div class="list">${todayList.map(item)}</div>`}
-    ${past.length > 0 && html`<h2>${t('Oldingi navbatlar')}</h2><div class="list">${past.map(item)}</div>`}
+    ${ids.length === 0 ? html`<div class="card"><b>${t('Avval ishchilarni navbatga yozing')}</b>
+        <span class="muted">${t('Hamma ishchilar tartib bilan navbatchi bo‘lib aylanadi.')}</span>
+        <button class="btn primary block" onClick=${() => addToRoster(notIn)}><${Icon} name="users" size=${18} />${t('Hamma ishchilarni navbatga yozish')}</button></div>`
+      : needsStart ? html`<div class="card fform"><b>${t('Navbatni boshlash')}</b>
+          <span class="muted">${t('Birinchi navbatchini tanlang. Keyingilarni dastur tartib bilan sanasi bilan o‘zi yozadi va ogohlantiradi.')}</span>
+          <${Field} label=${t('Birinchi navbatchi')}><select value=${startWorker || ids[0]} onChange=${(e) => setStartWorker(e.target.value)}>${ids.map((id) => html`<option value=${id}>${nameOf(id)}</option>`)}</select><//>
+          <${Field} label=${t('Boshlanish sanasi')}><input type="date" value=${startDate} onInput=${(e) => setStartDate(e.target.value)} /><//>
+          <button class="btn primary block" onClick=${start}><${Icon} name="bell" size=${18} />${t('Boshlash')}</button></div>`
+      : html`<div class=${'card ' + (todayRow ? '' : 'flat')}><div class="muted">${t('Bugungi navbatchi')} · ${t(wd(today))}</div>
+          ${todayRow ? html`<b style="font-size:22px">${nameOf(todayRow.worker_id)}${todayRow.note ? html`<span class="muted small"> · ${todayRow.note}</span>` : ''}</b>${absentBtn(todayRow)}`
+            : html`<b>${t('Bugun navbatchi hisoblanmoqda...')}</b>`}</div>`}
+
+    ${upcoming.length > 0 && html`<h2>${t('Keyingi navbatlar')}</h2><div class="list">${upcoming.map((d) => html`<${Row} icon="shield" title=${nameOf(d.worker_id)}
+      sub=${`${fmtDate(d.duty_date)} · ${t(wd(d.duty_date))}`} right=${absentBtn(d)} />`)}</div>`}
+
+    <h2>${t('Navbat tartibi')}</h2>
+    ${rows.length === 0 && html`<p class="muted small">${t('Hali hech kim yozilmagan.')}</p>`}
+    <div class="list">${rows.map((r, i) => html`<${Row} icon="user" title=${`${i + 1}. ${nameOf(r.worker_id)}`}
+      right=${html`<span class="rbtns"><button class="btn sm ghost" disabled=${i === 0} onClick=${() => move(r, -1)}>↑</button><button class="btn sm ghost" disabled=${i === rows.length - 1} onClick=${() => move(r, 1)}>↓</button><button class="btn sm ghost" onClick=${() => removeFromRoster(r)}>✕</button></span>`} />`)}</div>
+    ${notIn.length > 0 && ids.length > 0 && html`<div class="card"><span class="muted">${t('Navbatda yo‘q ishchilar')}: ${notIn.map((w) => w.full_name).join(', ')}</span>
+      <button class="btn block" onClick=${() => addToRoster(notIn)}><${Icon} name="plus" size=${18} />${t('Navbatga qo‘shish')}</button></div>`}
+
+    ${history.length > 0 && html`<h2>${t('Oldingi navbatlar')}</h2><div class="list">${history.map((d) => html`<${Row} icon=${d.status === 'absent' ? 'x' : 'check'} tone=${d.status === 'absent' ? 'amber' : ''}
+      title=${nameOf(d.worker_id)} sub=${`${fmtDate(d.duty_date)}${d.status === 'absent' ? ' · ' + t('Kelmadi') : ''}`} />`)}</div>`}
   <//>`
 }

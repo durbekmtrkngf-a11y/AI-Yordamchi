@@ -9,7 +9,7 @@ import { ExpensesPage, ClientsPage, FinancePage } from './b-money.js'
 import { PartnersPage, RentPage } from './b-partner.js'
 import { BackupPage } from './b-backup.js'
 import { MonthPage } from './b-month.js'
-import { DutyPage, NotifPage, HeaderRight, useNotifyWatcher, unreadCount } from './duty.js'
+import { DutyPage, NotifPage, HeaderRight, useNotifyWatcher, useDutyAutofill, unreadCount } from './duty.js'
 
 const NAV = [
   ['bosh', 'home', 'Bosh sahifa'], ['ishchilar', 'users', 'Ishchilar'], ['xarajat', 'wallet', 'Xarajatlar'],
@@ -30,6 +30,7 @@ const KASB_ORDER = ['kosib', 'zakatofkachi', 'kroychik', 'pardozchi']
 export function BossApp({ membership, onLogout }) {
   const [route, go] = useRoute('bosh')
   useNotifyWatcher()
+  useDutyAutofill()
   const [name, arg] = route.split('/')
   const p = { go, membership, arg, onLogout }
   const pages = {
