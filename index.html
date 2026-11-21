@@ -382,7 +382,7 @@ function cyr(s){return s.replace(/[A-Za-z][A-Za-z‘’'ʻʼ`]*/g,function(w){
 function trDom(root){if(LANG!='cy'||!root)return;var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),n,L=[];
  while(n=w.nextNode())L.push(n);
  L.forEach(function(n){var p=n.parentNode.nodeName;if(p=='TEXTAREA'||p=='SCRIPT'||p=='STYLE')return;n.nodeValue=cyr(n.nodeValue)})}
-var _R=R;R=function(){_R();trDom($('#app'));var b=$('#lgb');if(b)b.textContent=LANG=='cy'?'Lotin':'Кирилл'};
+var _R=R;R=function(){try{_R();trDom($('#app'))}catch(err){$('#app').innerHTML='<h1>Ko‘rsatishda xato</h1><p style="color:var(--mu)">'+e(err.message)+'</p><button onclick="location.reload()">Qayta urinish</button>'}var b=$('#lgb');if(b)b.textContent=LANG=='cy'?'Lotin':'Кирилл'};
 var _sh=sheet;sheet=function(h){_sh(h);trDom($('#sh'))};
 var _al=window.alert.bind(window);window.alert=function(s){_al(LANG=='cy'?cyr(String(s)):s)};
 var _cf=window.confirm.bind(window);window.confirm=function(s){return _cf(LANG=='cy'?cyr(String(s)):s)};
@@ -441,15 +441,23 @@ function DES(){
  lg('Kunlik ish: '+(DEB?'boshliq':w.name)+' '+ds);save();closeS();R()}
 
 window.onFB=boot;if(window.FB)boot();R();
+window.onFBErr=function(err){LOADING=false;$('#app').innerHTML='<h1>Ulanish xatosi</h1><p style="color:var(--mu)">'+e(err&&err.message||err)+'</p><button onclick="location.reload()">Qayta urinish</button>'};
+window.addEventListener('error',function(ev){if(LOADING)$('#app').innerHTML='<h1>Xato</h1><p style="color:var(--mu)">'+e(ev.message)+'</p><button onclick="location.reload()">Qayta urinish</button>'});
+setTimeout(function(){if(LOADING)$('#app').innerHTML='<h1>Ulanish uzoq davom etyapti</h1><p style="color:var(--mu)">Internetni tekshiring yoki qayta urining.</p><button onclick="location.reload()">Qayta urinish</button>'},12000);
 </script>
 <script type="module">
-import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import * as A from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import * as Fs from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import {firebaseConfig} from "./firebase-config.js";
-const app=initializeApp(firebaseConfig);
-const db=Fs.initializeFirestore(app,{localCache:Fs.persistentLocalCache({tabManager:Fs.persistentMultipleTabManager()})});
-window.FB=Object.assign({},A,Fs,{auth:A.getAuth(app),db});
-if(window.onFB)window.onFB();
+(async()=>{try{
+ const V="10.14.1",B="https://www.gstatic.com/firebasejs/"+V+"/";
+ const {initializeApp}=await import(B+"firebase-app.js");
+ const A=await import(B+"firebase-auth.js");
+ const Fs=await import(B+"firebase-firestore.js");
+ const {firebaseConfig}=await import("./firebase-config.js");
+ const app=initializeApp(firebaseConfig);
+ let db;
+ try{db=Fs.initializeFirestore(app,{localCache:Fs.persistentLocalCache({tabManager:Fs.persistentMultipleTabManager()})})}
+ catch(e1){db=Fs.initializeFirestore(app,{})}
+ window.FB=Object.assign({},A,Fs,{auth:A.getAuth(app),db});
+ if(window.onFB)window.onFB();
+}catch(err){window.FBERR=err;if(window.onFBErr)window.onFBErr(err)}})();
 </script>
 </body></html>
