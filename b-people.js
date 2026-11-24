@@ -4,7 +4,7 @@ import { html, useT, useStore, Page, Stat, Row, Chips, Icon, Field, MoneyInput, 
 import { supabase, friendlyError } from './lib.js'
 import * as C from './calc.js'
 
-const mcode = (D, id) => (C.live(D.models).find((m) => m.id === id) || (D.models || []).find((m) => m.id === id) || {}).code || '?'
+const mcode = (D, id) => C.mLabel(C.live(D.models).find((m) => m.id === id) || (D.models || []).find((m) => m.id === id))
 const typeName = (D, id) => ((D.worker_types || []).find((x) => x.id === id) || {}).name || ''
 const STATUS = { pending: ['Kutilmoqda', 'amber'], approved: ['Tasdiqlangan', 'green'], returned: ['Qaytarilgan', 'red'] }
 
@@ -42,7 +42,7 @@ export function WorkersPage({ go, membership }) {
         <div class="btns"><button class="btn primary sm" onClick=${() => decide(p.membership_id, true)}><${Icon} name="check" size=${16} />${t('Qabul qilish')}</button>
           <button class="btn danger sm" onClick=${() => decide(p.membership_id, false)}><${Icon} name="x" size=${16} />${t('Rad etish')}</button></div>
       </div>`)}</div>`}
-    ${C.live(D.work_entries).filter((e) => e.status === 'pending').length > 0 && html`<div class="list" style="margin-bottom:12px"><${Row} icon="check" tone="amber" title=${t('Tasdiq kutayotgan ishlar')} right=${C.live(D.work_entries).filter((e) => e.status === 'pending').length} onClick=${() => go('tasdiq')} /></div>`}
+    ${C.needApproval(D) && C.live(D.work_entries).filter((e) => e.status === 'pending').length > 0 && html`<div class="list" style="margin-bottom:12px"><${Row} icon="check" tone="amber" title=${t('Tasdiq kutayotgan ishlar')} right=${C.live(D.work_entries).filter((e) => e.status === 'pending').length} onClick=${() => go('tasdiq')} /></div>`}
     <div class="search"><${Icon} name="search" size=${18} /><input placeholder=${t('Ism bo‘yicha qidirish')} value=${q} onInput=${(e) => setQ(e.target.value)} /></div>
     <${Chips} value=${filter} onChange=${setFilter}
       items=${[['all', t('Hammasi')], ...types.map((x) => [x.id, t(x.name)]), ['arxiv', t('Arxiv')]]} />
@@ -94,7 +94,7 @@ export function WorkerPage({ arg, go }) {
       [t('Sana'), ...mids.map((m) => mcode(D, m)), t('Jami')],
       dates.map((d) => {
         const day = mids.map((m) => cells.get(d + '|' + m))
-        return [fmtDate(d).slice(0, 5), ...day.map((e) => (e ? e.pairs + (e.status === 'pending' ? '*' : e.status === 'returned' ? '!' : '') : '')), C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs) || '']
+        return [fmtDate(d).slice(0, 5), ...day.map((e) => (e ? e.pairs + (e.status === 'pending' && C.needApproval(D) ? '*' : e.status === 'returned' ? '!' : '') : '')), C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs) || '']
       }),
       [[t('Juft'), ...mids.map((m) => colPairs(m)), l.periodPairs], [t('So‘m'), ...mids.map((m) => C.fmt(colMoney(m))), C.fmt(l.periodEarned)]]) +
       note(t('* tasdiqlanmagan, ! qaytarilgan (hisobga olinmaydi)')) +
@@ -128,7 +128,7 @@ export function WorkerPage({ arg, go }) {
       <div class="kv"><span>− ${t('Berilgan avans')}</span><b>${C.fmt(l.advances)}</b></div>
       <div class="kv"><span>− ${t('Qarz')}</span><b>${C.fmt(l.debts)}</b></div>
       <div class="kv"><span>− ${t('To‘langan maosh')}</span><b>${C.fmt(l.paid)}</b></div>
-      ${l.unverified > 0 && html`<div class="msg warn">${t('Shundan tasdiqlanmagan')}: ${C.fmt(l.unverified)} ${t('so‘m')}</div>`}
+      ${l.unverified > 0 && C.needApproval(D) && html`<div class="msg warn">${t('Shundan tasdiqlanmagan')}: ${C.fmt(l.unverified)} ${t('so‘m')}</div>`}
       ${l.noPrice > 0 && html`<div class="msg warn">${l.noPrice} ${t('ta ish uchun narx belgilanmagan (Modellar bo‘limi)')}</div>`}
     </div>
     <div class="btns" style="margin-bottom:12px">
@@ -144,7 +144,7 @@ export function WorkerPage({ arg, go }) {
           const day = mids.map((m) => cells.get(d + '|' + m))
           const tot = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)
           return html`<tr><td>${fmtDate(d).slice(0, 5)}</td>
-            ${day.map((e) => html`<td class=${!e ? 'zero' : e.status === 'pending' ? 'has pend tapc' : e.status === 'returned' ? 'ret tapc' : 'has tapc'} onClick=${e ? () => setEdit(e) : null}>${e ? e.pairs : '·'}</td>`)}
+            ${day.map((e) => html`<td class=${!e ? 'zero' : e.status === 'pending' && C.needApproval(D) ? 'has pend tapc' : e.status === 'returned' ? 'ret tapc' : 'has tapc'} onClick=${e ? () => setEdit(e) : null}>${e ? e.pairs : '·'}</td>`)}
             <td class=${tot ? 'has' : 'zero'}>${tot || '·'}</td></tr>`
         })}</tbody>
         <tfoot><tr><td>${t('Juft')}</td>${mids.map((m) => html`<td>${C.fmt(colPairs(m))}</td>`)}<td>${C.fmt(l.periodPairs)}</td></tr>

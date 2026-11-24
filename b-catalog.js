@@ -22,7 +22,7 @@ export function ModelsPage({ go }) {
   return html`<${Page} title=${t('Modellar')} sub=${`${list.length} ${t('ta')}`} right=${html`<button class="icon-btn light" onClick=${() => setSheet({})}><${Icon} name="plus" /></button>`}>
     <${Chips} value=${filter} onChange=${setFilter} items=${[['active', t('Faol')], ['inactive', t('Vaqtincha o‘chirilgan')], ['arxiv', t('O‘chirilganlar')]]} />
     ${list.length === 0 && html`<${Empty} icon="shoe" text=${t('Hozircha model yo‘q. + tugmasi bilan qo‘shing.')} />`}
-    <div class="list">${list.map((m) => html`<${Row} icon="shoe" title=${`${m.code}${m.name ? ' · ' + m.name : ''}`}
+    <div class="list">${list.map((m) => html`<${Row} icon="shoe" img=${m.photo} title=${C.mLabel(m)}
       sub=${types.map((ty) => { const p = C.priceFor(prices, m.id, ty.id, today); return `${t(ty.name)}: ${p === null ? '—' : C.fmt(p)}` }).join(' · ')}
       right=${html`<span class="rbtns">${m.deleted_at ? html`<span class="pill gray">${t('O‘chirilgan')}</span>` : html`${!m.is_active ? html`<span class="pill amber">${t('Nofaol')}</span>` : null}<button class="btn sm ghost" onClick=${(ev) => { ev.stopPropagation(); setSheet(m) }}><${Icon} name="edit" size=${16} /></button><button class="btn sm ghost" onClick=${(ev) => { ev.stopPropagation(); remove(m) }}><${Icon} name="archive" size=${16} /></button>`}</span>`}
       onClick=${() => setSheet(m)} />`)}</div>
@@ -39,6 +39,17 @@ function ModelSheet({ model, onClose }) {
   const [name, setName] = useState(model ? model.name : '')
   const [note, setNote] = useState(model ? model.note : '')
   const [active, setActive] = useState(model ? model.is_active : true)
+  const [photo, setPhoto] = useState(model && model.photo ? model.photo : '')
+  function pickPhoto(ev) {
+    const f = ev.target.files && ev.target.files[0]; if (!f) return
+    const fr = new FileReader()
+    fr.onload = () => { const im = new Image(); im.onload = () => {
+      const k = Math.min(1, 160 / Math.max(im.width, im.height)), c = document.createElement('canvas')
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k)
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); setPhoto(c.toDataURL('image/jpeg', 0.65))
+    }; im.src = fr.result }
+    fr.readAsDataURL(f)
+  }
   const [pr, setPr] = useState(Object.fromEntries(types.map((ty) => [ty.id, current(ty.id) === null ? '' : current(ty.id)])))
   const [busy, setBusy] = useState(false)
 
@@ -57,8 +68,9 @@ function ModelSheet({ model, onClose }) {
     }
     setBusy(true)
     let id = model ? model.id : null
-    if (model) S.patch('models', id, { code: c, name: name.trim(), note: note.trim(), is_active: active })
-    else id = S.save('models', { code: c, name: name.trim(), note: note.trim(), is_active: active })
+    const ph = photo !== ((model && model.photo) || '') ? { photo: photo || null } : {}
+    if (model) S.patch('models', id, { code: c, name: name.trim(), note: note.trim(), is_active: active, ...ph })
+    else id = S.save('models', { code: c, name: name.trim(), note: note.trim(), is_active: active, ...ph })
     if (changes.length) {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) { toast(t('Model saqlandi. Narxni o‘zgartirish uchun internet kerak.'), 'err'); setBusy(false); return onClose() }
       await S.sync()
@@ -79,6 +91,7 @@ function ModelSheet({ model, onClose }) {
     <form class="fform" onSubmit=${(ev) => { ev.preventDefault(); if (!busy) save() }}>
     <div class="two"><${Field} label=${t('Model kodi')}><input enterkeyhint="go" value=${code} onInput=${(e) => setCode(e.target.value)} placeholder="01" /><//>
       <${Field} label=${t('Model nomi')}><input enterkeyhint="go" value=${name} onInput=${(e) => setName(e.target.value)} /><//></div>
+    <${Field} label=${t('Model rasmi (ixtiyoriy)')}><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${photo ? html`<img class="mth big" src=${photo} alt="" />` : null}<input type="file" accept="image/*" onChange=${pickPhoto} style="flex:1;min-width:0" />${photo ? html`<button type="button" class="btn sm ghost" onClick=${() => setPhoto('')}>${t('Olib tashlash')}</button>` : null}</div><//>
     <${Field} label=${t('Izoh')}><input enterkeyhint="go" value=${note} onInput=${(e) => setNote(e.target.value)} /><//>
     <${Switch} on=${active} onChange=${setActive} label=${t('Faol')} />
     <b>${t('Ish haqi narxi (bir juft uchun, so‘m)')}</b>
@@ -103,7 +116,7 @@ export function ValuesPage({ go }) {
     ${models.length === 0 && html`<${Empty} icon="tag" text=${t('Avval Modellar bo‘limida model qo‘shing')} />`}
     <div class="list">${models.map((m) => {
       const c = C.costFor(D, m.id, today)
-      return html`<${Row} icon="tag" title=${`${m.code}${m.name ? ' · ' + m.name : ''}`}
+      return html`<${Row} icon="tag" img=${m.photo} title=${C.mLabel(m)}
         sub=${c ? `${t('Tannarx')}: ${C.fmt(c.cost_per_pair)} · ${t('Sotuv')}: ${C.fmt(c.sale_price_per_pair)}` : t('Kiritilmagan')}
         right=${c ? html`<span class=${c.sale_price_per_pair - c.cost_per_pair >= 0 ? 'pos' : 'neg'}>${C.fmt(c.sale_price_per_pair - c.cost_per_pair)}</span>` : null}
         onClick=${() => setSheet(m)} />`

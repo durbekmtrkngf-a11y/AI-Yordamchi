@@ -9,10 +9,11 @@
 const BOSS_TABLES = [
   'worker_types', 'workers', 'models', 'model_prices', 'work_entries', 'advances', 'debts',
   'salary_payments', 'expenses', 'clients', 'orders', 'client_payments', 'partners',
-  'partner_shares', 'partner_payments', 'rent_records', 'rent_payments', 'product_costs', 'duties', 'duty_roster', 'notifications',
+  'partner_shares', 'partner_payments', 'rent_records', 'rent_payments', 'product_costs', 'duties', 'notifications',
+  'app_settings', 'boss_output',
 ]
-const WORKER_TABLES = ['worker_types', 'workers', 'models', 'model_prices', 'work_entries', 'advances', 'debts', 'salary_payments', 'duties', 'notifications']
-const NATURAL = { work_entries: ['worker_id', 'model_id', 'work_date'] }
+const WORKER_TABLES = ['worker_types', 'workers', 'models', 'model_prices', 'work_entries', 'advances', 'debts', 'salary_payments', 'duties', 'notifications', 'app_settings']
+const NATURAL = { work_entries: ['worker_id', 'model_id', 'work_date'], app_settings: ['key'], boss_output: ['model_id', 'work_date'] }
 
 /* ---------- IndexedDB (kalit-qiymat). Ishlamasa, xotirada ishlaydi ---------- */
 const mem = new Map()

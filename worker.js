@@ -33,13 +33,13 @@ function Home({ go, membership }) {
   const day = C.workerLedger(D, w.id, today, today); const all = C.workerLedger(D, w.id)
   const returned = C.live(D.work_entries).filter((e) => e.status === 'returned').length
   const reqAdv = C.live(D.advances).filter((a) => a.status === 'requested').length
-  const myDuty = C.live(D.duties).filter((d) => d.worker_id === w.id && d.status !== 'absent')
+  const myDuty = C.live(D.duties).filter((d) => d.worker_id === w.id)
   const dutyToday = myDuty.some((d) => d.duty_date === today)
   const nextDuty = myDuty.filter((d) => d.duty_date > today).sort((a, b) => (a.duty_date < b.duty_date ? -1 : 1))[0]
   return html`<${Page} title=${w.full_name} sub=${`${company} · ${t(kasb || '')}`} right=${html`<${HeaderRight} go=${go} />`}>
     <${LangSeg} />
     ${dutyToday && html`<div class="msg ok" style="margin-bottom:12px"><b>${t('Bugun siz navbatchisiz')}</b></div>`}
-    ${!dutyToday && nextDuty && html`<div class="msg warn" style="margin-bottom:12px">${t('Keyingi navbatingiz')}: <b>${fmtDate(nextDuty.duty_date)}</b> (${t(['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'][new Date(nextDuty.duty_date + 'T12:00:00').getDay()])})${nextDuty.note ? ' · ' + nextDuty.note : ''}</div>`}
+    ${!dutyToday && nextDuty && html`<div class="msg warn" style="margin-bottom:12px">${t('Keyingi navbatingiz')}: <b>${fmtDate(nextDuty.duty_date)}</b>${nextDuty.note ? ' · ' + nextDuty.note : ''}</div>`}
     ${returned > 0 && html`<button class="msg err" style="width:100%;text-align:left;margin-bottom:12px" onClick=${() => go('daftar')}><b>${returned} ${t('ta ish qaytarilgan')}</b> — ${t('tuzatib qayta kiriting')}</button>`}
     <div class="grid">
       <${Stat} icon="shoe" n=${C.fmt(day.periodPairs)} label=${t('Bugun bajargan ish (juft)')} />
@@ -60,12 +60,13 @@ function Home({ go, membership }) {
 /** Katak: son to'g'ridan-to'g'ri yoziladi. Klaviaturadagi "keyingi/o'tish" tugmasi saqlaydi va keyingi katakka o'tadi. */
 function Cell({ entry, onCommit }) {
   const { t } = useT()
+  const need = C.needApproval(useStore().all())
   const stored = entry ? String(entry.pairs) : ''
   const [v, setV] = useState(stored)
   const [focus, setFocus] = useState(false)
   useEffect(() => { if (!focus) setV(stored) }, [stored, focus])
   const locked = !!entry && entry.status === 'approved'
-  const cls = 'cellin' + (entry ? (entry.status === 'pending' ? ' pend' : entry.status === 'returned' ? ' ret' : ' ok') : '')
+  const cls = 'cellin' + (entry ? (entry.status === 'pending' && need ? ' pend' : entry.status === 'returned' ? ' ret' : ' ok') : '')
   function commit() {
     setFocus(false)
     const n = v === '' ? 0 : Number(v)
@@ -106,7 +107,7 @@ function Notebook({ go }) {
     const kind = await ask(t('Daftar qaysi formatda saqlansin?'), { options: [{ value: 'csv', label: 'CSV', tone: 'primary' }, { value: 'xlsx', label: 'Excel (XLSX)', tone: 'navy' }] })
     if (!kind) return
     const days = [...new Set(entries.map((e) => e.work_date))].sort().reverse()
-    const aoa = [[t('Sana'), ...models.map((m) => m.code), t('Jami')], ...days.map((d) => {
+    const aoa = [[t('Sana'), ...models.map((m) => C.mLabel(m)), t('Jami')], ...days.map((d) => {
       const day = models.map((m) => cell.get(d + '|' + m.id))
       return [fmtDate(d), ...day.map((e) => (e ? e.pairs : '')), C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)]
     })]
@@ -124,7 +125,7 @@ function Notebook({ go }) {
     <button class="btn block" onClick=${exportGrid}><${Icon} name="download" size=${18} />${t('Daftarni Excel/CSV qilish')}</button>
     <div class="datebar"><${Icon} name="search" size=${20} /><input type="date" max=${today} value=${jump} onInput=${(e) => setJump(e.target.value)} />${jump && html`<button class="btn sm" onClick=${() => setJump('')}>${t('Hammasi')}</button>`}</div>
     ${models.length === 0 && html`<div class="msg warn">${t('Boshliq hali model qo‘shmagan.')}</div>`}
-    <div class="table-wrap"><table class="grid-t cells"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${m.code}</th>`)}<th>${t('Jami')}</th></tr></thead>
+    <div class="table-wrap"><table class="grid-t cells"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${C.mLabel(m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
       <tbody>${rows.map((d) => {
         const day = models.map((m) => cell.get(d + '|' + m.id))
         const total = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)
@@ -159,7 +160,7 @@ function EntrySheet({ date, models, worker, onClose }) {
   const add = (k) => setPairs((Number(pairs) || 0) + k)
   return html`<${Sheet} title=${t('Ish kiritish')} onClose=${onClose}>
     <${Field} label=${t('Sana')}><input type="date" max=${today} value=${d} onInput=${(e) => pick(e.target.value || d, m)} /><//>
-    <${Field} label=${t('Model kodi')}><div class="chips" style="flex-wrap:wrap;overflow:visible">${models.map((x) => html`<button class=${m === x.id ? 'on' : ''} onClick=${() => pick(d, x.id)}>${x.code}</button>`)}</div><//>
+    <${Field} label=${t('Model kodi')}><div class="chips" style="flex-wrap:wrap;overflow:visible">${models.map((x) => html`<button class=${m === x.id ? 'on' : ''} onClick=${() => pick(d, x.id)}>${x.photo ? html`<img src=${x.photo} alt="" style="width:22px;height:22px;border-radius:6px;object-fit:cover;vertical-align:middle;margin-right:6px" />` : null}${C.mLabel(x)}</button>`)}</div><//>
     ${ex && ex.status === 'returned' && html`<div class="msg err">${t('Boshliq qaytargan')}${ex.return_note ? ': ' + ex.return_note : ''}. ${t('Tuzatib qayta saqlang.')}</div>`}
     ${locked && html`<div class="msg warn">${t('Bu ish tasdiqlangan. O‘zgartirish uchun boshliqdan ruxsat so‘rang.')}</div>`}
     <input class="bigin" inputmode="numeric" placeholder="0" disabled=${locked} value=${pairs} onInput=${(e) => { const v = e.target.value.replace(/\D/g, ''); setPairs(v === '' ? '' : Number(v)) }} />

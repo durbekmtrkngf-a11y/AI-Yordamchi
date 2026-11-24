@@ -164,7 +164,7 @@ function ClientDetail({ id, go }) {
   const b = C.clientBalance(D, id)
   const orders = C.live(D.orders).filter((o) => o.client_id === id).sort((a, z) => (a.order_date < z.order_date ? 1 : -1))
   const pays = C.live(D.client_payments).filter((p) => p.client_id === id).sort((a, z) => (a.paid_date < z.paid_date ? 1 : -1))
-  const mcode = (mid) => ((D.models || []).find((m) => m.id === mid) || {}).code || '?'
+  const mcode = (mid) => C.mLabel((D.models || []).find((m) => m.id === mid))
   const del = async (table, rid) => { if (await ask(t('Bu yozuv arxivlansinmi?'), { danger: true })) S.archive(table, rid) }
   return html`<${Page} title=${c.name} sub=${c.address} back=${() => go('klient')}
     right=${c.phone ? html`<a class="icon-btn light" href=${'tel:' + c.phone}><${Icon} name="phone" size=${20} /></a>` : null}>
@@ -224,7 +224,7 @@ function OrderSheet({ client, onClose }) {
   }
   return html`<${Sheet} title=${`${client.name}: ${t('buyurtma')}`} onClose=${onClose}>
     ${models.length === 0 ? html`<div class="msg warn">${t('Avval Modellar bo‘limida model qo‘shing')}</div>` : html`
-    <${Field} label=${t('Model')}><select value=${model} onChange=${(e) => { setModel(e.target.value); setPrice(defPrice(e.target.value)) }}>${models.map((m) => html`<option value=${m.id}>${m.code} ${m.name}</option>`)}</select><//>
+    <${Field} label=${t('Model')}><select value=${model} onChange=${(e) => { setModel(e.target.value); setPrice(defPrice(e.target.value)) }}>${models.map((m) => html`<option value=${m.id}>${C.mLabel(m)}</option>`)}</select><//>
     <div class="two"><${Field} label=${t('Miqdor (juft)')}><${MoneyInput} value=${pairs} onChange=${setPairs} /><//>
       <${Field} label=${t('Bir juft narxi')}><${MoneyInput} value=${price} onChange=${setPrice} /><//></div>
     <div class="kv big"><span>${t('Jami')}</span><b>${C.fmt((Number(pairs) || 0) * (Number(price) || 0))} ${t('so‘m')}</b></div>

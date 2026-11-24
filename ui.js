@@ -145,10 +145,10 @@ export function Stat({ n, label, icon, tone, onClick, wide }) {
     <div class="n">${n}</div><div class="l">${label}</div><//>`
 }
 
-export function Row({ icon, title, sub, right, onClick, tone }) {
+export function Row({ icon, img, title, sub, right, onClick, tone }) {
   const Tag = onClick ? 'button' : 'div'
   return html`<${Tag} class=${'row-item ' + (tone || '')} onClick=${onClick}>
-    ${icon ? html`<span class="row-ic"><${Icon} name=${icon} size=${20} /></span>` : null}
+    ${img ? html`<img class="mth" src=${img} alt="" />` : icon ? html`<span class="row-ic"><${Icon} name=${icon} size=${20} /></span>` : null}
     <span class="row-m"><b>${title}</b>${sub ? html`<small>${sub}</small>` : null}</span>
     <span class="row-r">${right}</span>
     ${onClick ? html`<span class="row-chev"><${Icon} name="next" size=${18} /></span>` : null}

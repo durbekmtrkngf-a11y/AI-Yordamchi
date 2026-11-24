@@ -103,6 +103,7 @@ export function production(data, date) {
   const done = kosib ? all.filter((e) => e.worker_type_id === kosib.id) : []
   const byModel = new Map()
   for (const e of done) byModel.set(e.model_id, (byModel.get(e.model_id) || 0) + e.pairs)
+  for (const b of live(data.boss_output)) if (b.work_date === date && b.pairs > 0) byModel.set(b.model_id, (byModel.get(b.model_id) || 0) + b.pairs)
   const rows = [...byModel.entries()].map(([modelId, pairs]) => {
     const m = (data.models || []).find((x) => x.id === modelId)
     const c = costFor(data, modelId, date)
@@ -232,3 +233,8 @@ export function monthReport(data, from, to) {
   const pairs = sum(rows, (r) => r.pairs), sale = sum(rows, (r) => r.sale), cost = sum(rows, (r) => r.cost)
   return { rows, days, pairs, sale, cost, profit: sale - cost, wages, missing: sum(rows, (r) => r.missing) }
 }
+
+/** Model nomi kod oldida: "Klassik · 101" */
+export const mLabel = (m) => (!m ? '?' : m.name ? `${m.name} · ${m.code}` : m.code)
+/** Boshliq tasdig'i yoqilganmi? (Yana > sozlama). O'chiq bo'lsa ishlar tasdiqsiz ham hisobga olinadi. */
+export const needApproval = (D) => live(D.app_settings).some((x) => x.key === 'require_approval' && x.value === '1')

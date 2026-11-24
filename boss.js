@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'preact/hooks'
-import { html, useT, useStore, Page, Stat, Row, Icon, BottomNav, useRoute, PasswordInput, LangSwitch, toast, todayStr, fmtDate, Empty, LangSeg } from './ui.js'
+import { html, useT, useStore, Page, Stat, Row, Icon, BottomNav, useRoute, PasswordInput, LangSwitch, toast, todayStr, fmtDate, Empty, LangSeg, Switch } from './ui.js'
 import { supabase, friendlyError } from './lib.js'
 import * as C from './calc.js'
 import { SyncBadge, SyncPage } from './sync-ui.js'
@@ -9,7 +9,8 @@ import { ExpensesPage, ClientsPage, FinancePage } from './b-money.js'
 import { PartnersPage, RentPage } from './b-partner.js'
 import { BackupPage } from './b-backup.js'
 import { MonthPage } from './b-month.js'
-import { DutyPage, NotifPage, HeaderRight, useNotifyWatcher, useDutyAutofill, unreadCount } from './duty.js'
+import { OwnOutput } from './b-own.js'
+import { DutyPage, NotifPage, HeaderRight, useNotifyWatcher, unreadCount } from './duty.js'
 
 const NAV = [
   ['bosh', 'home', 'Bosh sahifa'], ['ishchilar', 'users', 'Ishchilar'], ['xarajat', 'wallet', 'Xarajatlar'],
@@ -30,7 +31,6 @@ const KASB_ORDER = ['kosib', 'zakatofkachi', 'kroychik', 'pardozchi']
 export function BossApp({ membership, onLogout }) {
   const [route, go] = useRoute('bosh')
   useNotifyWatcher()
-  useDutyAutofill()
   const [name, arg] = route.split('/')
   const p = { go, membership, arg, onLogout }
   const pages = {
@@ -47,6 +47,7 @@ export function BossApp({ membership, onLogout }) {
 
 function Home({ go, membership }) {
   const { t } = useT()
+  const [own, setOwn] = useState(false)
   const S = useStore(); const D = S.all(); const today = todayStr()
   const company = membership.companies && membership.companies.name
   const days = []
@@ -62,21 +63,28 @@ function Home({ go, membership }) {
       <span class="cap">${t('Bugun chiqqan ish')}</span>
       <span class="big">${C.fmt(todayP.pairs)} ${t('juft')}</span>
     </button>
+    <button class="btn block" style="margin:10px 0" onClick=${() => setOwn(true)}><${Icon} name="plus" size=${18} />${t('Umumiy bugungi ishni o‘zim kiritaman')}</button>
     <h2>${t('Kunlik ish chiqishi')}</h2>
     ${cols.length === 0 || shown.length === 0 ? html`<${Empty} icon="book" text=${t('Hozircha ish yo‘q')} />` : html`
-      <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${cols.map((m) => html`<th>${m.code}</th>`)}<th>${t('Jami')}</th></tr></thead>
+      <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${cols.map((m) => html`<th>${C.mLabel(m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
         <tbody>${shown.map(({ d, p }) => html`<tr class=${d === today ? 'today' : ''}><td>${fmtDate(d)}</td>
           ${cols.map((m) => { const r = p.rows.find((x) => x.modelId === m.id); return html`<td class=${r ? 'has' : 'zero'}>${r ? r.pairs : '·'}</td>` })}
           <td class=${p.pairs ? 'has' : 'zero'}>${p.pairs || '·'}</td></tr>`)}</tbody></table></div>
       <p class="muted small">${t('Kosiblar bajargan ishlar (qaytarilganlar hisobga olinmaydi). Batafsil ma‘lumot bo‘limlar ichida.')}</p>`}
     <h2>${t('Bo‘limlar')}</h2>
     <div class="tiles">${TILES.map(([id, ic, label]) => html`<button class="tile" onClick=${() => go(id)}><span class="ti"><${Icon} name=${ic} size=${26} /></span><span>${t(label)}</span></button>`)}</div>
+    ${own && html`<${OwnOutput} onClose=${() => setOwn(false)} />`}
   <//>`
 }
 
 function More({ go, membership, onLogout }) {
   const { t } = useT()
   const unread = unreadCount(useStore())
+  const S2 = useStore(); const D2 = S2.all()
+  function setApproval(on) {
+    const ex = C.live(D2.app_settings).find((x) => x.key === 'require_approval')
+    if (ex) S2.patch('app_settings', ex.id, { value: on ? '1' : '0' }); else S2.save('app_settings', { key: 'require_approval', value: on ? '1' : '0' })
+  }
   const code = (membership.companies && membership.companies.invite_code) || ''
   const link = `${location.origin}${location.pathname}?kod=${code}`
   const [prof, setProf] = useState(null)
@@ -114,6 +122,8 @@ function More({ go, membership, onLogout }) {
         <${PasswordInput} value=${p2} onChange=${setP2} placeholder=${t('Parolni takrorlang')} />
         <button class="btn primary block">${t('Saqlash')}</button></form>`}
     </div>
+    <div class="card"><${Switch} on=${C.needApproval(D2)} onChange=${setApproval} label=${t('Ishchi ishini tasdiqlash')} />
+      <span class="muted small">${t('Ixtiyoriy. O‘chiq bo‘lsa, ishlar tasdiqsiz ham hisobga olinadi va hech qanday ogohlantirish chiqmaydi.')}</span></div>
     <div class="card"><div class="kv"><span>${t('Til')}</span><${LangSwitch} dark=${true} /></div></div>
     <button class="btn danger block" onClick=${onLogout}><${Icon} name="logout" size=${18} />${t('Chiqish')}</button>
     <p class="footer-note">Poyabzal Seh · AI Yordamchi</p>
