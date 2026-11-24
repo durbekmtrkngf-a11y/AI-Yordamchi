@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks'
 import { html, useT, useStore, Page, Stat, Row, Chips, Icon, Field, MoneyInput, Sheet, Switch, Empty, toast, ask, todayStr, fmtDate } from './ui.js'
 import { supabase, friendlyError } from './lib.js'
 import * as C from './calc.js'
+import { PhotoView, resizeImage } from './photo.js'
 
 const KASB_ORDER = ['kosib', 'zakatofkachi', 'kroychik', 'pardozchi']
 const sortedTypes = (D) => C.live(D.worker_types).sort((a, b) => KASB_ORDER.indexOf(a.code) - KASB_ORDER.indexOf(b.code))
@@ -40,15 +41,12 @@ function ModelSheet({ model, onClose }) {
   const [note, setNote] = useState(model ? model.note : '')
   const [active, setActive] = useState(model ? model.is_active : true)
   const [photo, setPhoto] = useState(model && model.photo ? model.photo : '')
-  function pickPhoto(ev) {
+  const [bigPhoto, setBig] = useState(null)
+  const [pvOn, setPvOn] = useState(false)
+  async function pickPhoto(ev) {
     const f = ev.target.files && ev.target.files[0]; if (!f) return
-    const fr = new FileReader()
-    fr.onload = () => { const im = new Image(); im.onload = () => {
-      const k = Math.min(1, 160 / Math.max(im.width, im.height)), c = document.createElement('canvas')
-      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k)
-      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); setPhoto(c.toDataURL('image/jpeg', 0.65))
-    }; im.src = fr.result }
-    fr.readAsDataURL(f)
+    try { const [a, b] = await Promise.all([resizeImage(f, 160, 0.65), resizeImage(f, 720, 0.78)]); setPhoto(a); setBig(b) }
+    catch (_) { toast(t('Rasm o‘qilmadi'), 'err') }
   }
   const [pr, setPr] = useState(Object.fromEntries(types.map((ty) => [ty.id, current(ty.id) === null ? '' : current(ty.id)])))
   const [busy, setBusy] = useState(false)
@@ -71,6 +69,13 @@ function ModelSheet({ model, onClose }) {
     const ph = photo !== ((model && model.photo) || '') ? { photo: photo || null } : {}
     if (model) S.patch('models', id, { code: c, name: name.trim(), note: note.trim(), is_active: active, ...ph })
     else id = S.save('models', { code: c, name: name.trim(), note: note.trim(), is_active: active, ...ph })
+    if (bigPhoto !== null) {
+      await S.sync()
+      const row = S.all().models.find((x) => x.id === id)
+      if (!row || row._pending) toast(t('Katta rasm hali yuklanmadi. Internet bilan qayta saqlang.'), 'err')
+      else if (bigPhoto === '') await supabase.from('model_photos').delete().eq('model_id', id)
+      else { const { error } = await supabase.from('model_photos').upsert({ model_id: id, company_id: row.company_id, big: bigPhoto }); if (error) toast(friendlyError(error.message), 'err') }
+    }
     if (changes.length) {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) { toast(t('Model saqlandi. Narxni o‘zgartirish uchun internet kerak.'), 'err'); setBusy(false); return onClose() }
       await S.sync()
@@ -91,7 +96,7 @@ function ModelSheet({ model, onClose }) {
     <form class="fform" onSubmit=${(ev) => { ev.preventDefault(); if (!busy) save() }}>
     <div class="two"><${Field} label=${t('Model kodi')}><input enterkeyhint="go" value=${code} onInput=${(e) => setCode(e.target.value)} placeholder="01" /><//>
       <${Field} label=${t('Model nomi')}><input enterkeyhint="go" value=${name} onInput=${(e) => setName(e.target.value)} /><//></div>
-    <${Field} label=${t('Model rasmi (ixtiyoriy)')}><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${photo ? html`<img class="mth big" src=${photo} alt="" />` : null}<input type="file" accept="image/*" onChange=${pickPhoto} style="flex:1;min-width:0" />${photo ? html`<button type="button" class="btn sm ghost" onClick=${() => setPhoto('')}>${t('Olib tashlash')}</button>` : null}</div><//>
+    <${Field} label=${t('Model rasmi (ixtiyoriy)')}><div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${photo ? html`<img class="mth big" src=${photo} alt="" onClick=${() => setPvOn(true)} style="cursor:zoom-in" />` : null}<input type="file" accept="image/*" onChange=${pickPhoto} style="flex:1;min-width:0" />${photo ? html`<button type="button" class="btn sm ghost" onClick=${() => { setPhoto(''); setBig('') }}>${t('Olib tashlash')}</button>` : null}</div><//>
     <${Field} label=${t('Izoh')}><input enterkeyhint="go" value=${note} onInput=${(e) => setNote(e.target.value)} /><//>
     <${Switch} on=${active} onChange=${setActive} label=${t('Faol')} />
     <b>${t('Ish haqi narxi (bir juft uchun, so‘m)')}</b>
@@ -102,7 +107,7 @@ function ModelSheet({ model, onClose }) {
     ${model && !model.deleted_at && html`<button type="button" class="btn danger block" onClick=${archive}><${Icon} name="archive" size=${18} />${t('O‘chirish')}</button>`}
     ${model && model.deleted_at && html`<button type="button" class="btn block" onClick=${() => { S.restore('models', model.id); onClose() }}>${t('Qaytarish')}</button>`}
     </form>
-  <//>`
+  <//>${pvOn && html`<${PhotoView} m=${{ id: model ? model.id : null, code, name, photo, big: bigPhoto || null }} onClose=${() => setPvOn(false)} />`}`
 }
 
 /* ===================== Qiymatlar: tannarx, sotuv narxi, foyda ===================== */

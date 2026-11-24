@@ -2,6 +2,7 @@ import { useState, useEffect } from 'preact/hooks'
 import { html, useT, useStore, Page, Stat, Row, Icon, Field, MoneyInput, Sheet, Empty, BottomNav, useRoute, LangSwitch, toast, ask, todayStr, fmtDate, downloadFile, LangSeg } from './ui.js'
 import { supabase } from './lib.js'
 import * as C from './calc.js'
+import { PhotoView } from './photo.js'
 import { SyncBadge, SyncPage } from './sync-ui.js'
 import { NotifPage, HeaderRight, useNotifyWatcher, unreadCount } from './duty.js'
 
@@ -91,6 +92,7 @@ function Cell({ entry, onCommit }) {
 function Notebook({ go }) {
   const { t } = useT(); const { S, D, w, today } = useMe()
   const [sheet, setSheet] = useState(null); const [jump, setJump] = useState('')
+  const [pv, setPv] = useState(null)
   if (!w) return html`<${Page} title=${t('Ish daftari')}><${Empty} icon="clock" text=${t('Ma‘lumotlar yuklanmoqda...')} /><//>`
   const models = C.live(D.models).filter((m) => m.is_active).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }))
   const entries = C.live(D.work_entries)
@@ -125,7 +127,8 @@ function Notebook({ go }) {
     <button class="btn block" onClick=${exportGrid}><${Icon} name="download" size=${18} />${t('Daftarni Excel/CSV qilish')}</button>
     <div class="datebar"><${Icon} name="search" size=${20} /><input type="date" max=${today} value=${jump} onInput=${(e) => setJump(e.target.value)} />${jump && html`<button class="btn sm" onClick=${() => setJump('')}>${t('Hammasi')}</button>`}</div>
     ${models.length === 0 && html`<div class="msg warn">${t('Boshliq hali model qo‘shmagan.')}</div>`}
-    <div class="table-wrap"><table class="grid-t cells"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${C.mLabel(m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
+    ${pv && html`<${PhotoView} m=${pv} onClose=${() => setPv(null)} />`}
+    <div class="table-wrap"><table class="grid-t cells"><thead><tr><th>${t('Sana')}</th>${models.map((m) => html`<th>${m.photo ? html`<img class="thimg" src=${m.photo} onClick=${() => setPv(m)} alt="" />` : null}${C.mLabel(m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
       <tbody>${rows.map((d) => {
         const day = models.map((m) => cell.get(d + '|' + m.id))
         const total = C.sum(day.filter((e) => e && e.status !== 'returned'), (e) => e.pairs)

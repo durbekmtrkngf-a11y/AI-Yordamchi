@@ -10,6 +10,7 @@ import { PartnersPage, RentPage } from './b-partner.js'
 import { BackupPage } from './b-backup.js'
 import { MonthPage } from './b-month.js'
 import { OwnOutput } from './b-own.js'
+import { PhotoView } from './photo.js'
 import { DutyPage, NotifPage, HeaderRight, useNotifyWatcher, unreadCount } from './duty.js'
 
 const NAV = [
@@ -48,6 +49,7 @@ export function BossApp({ membership, onLogout }) {
 function Home({ go, membership }) {
   const { t } = useT()
   const [own, setOwn] = useState(false)
+  const [pv, setPv] = useState(null)
   const S = useStore(); const D = S.all(); const today = todayStr()
   const company = membership.companies && membership.companies.name
   const days = []
@@ -66,7 +68,7 @@ function Home({ go, membership }) {
     <button class="btn block" style="margin:10px 0" onClick=${() => setOwn(true)}><${Icon} name="plus" size=${18} />${t('Umumiy bugungi ishni o‘zim kiritaman')}</button>
     <h2>${t('Kunlik ish chiqishi')}</h2>
     ${cols.length === 0 || shown.length === 0 ? html`<${Empty} icon="book" text=${t('Hozircha ish yo‘q')} />` : html`
-      <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${cols.map((m) => html`<th>${C.mLabel(m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
+      <div class="table-wrap"><table class="grid-t"><thead><tr><th>${t('Sana')}</th>${cols.map((m) => html`<th>${m.photo ? html`<img class="thimg" src=${m.photo} onClick=${() => setPv(m)} alt="" />` : null}${C.mLabel(m)}</th>`)}<th>${t('Jami')}</th></tr></thead>
         <tbody>${shown.map(({ d, p }) => html`<tr class=${d === today ? 'today' : ''}><td>${fmtDate(d)}</td>
           ${cols.map((m) => { const r = p.rows.find((x) => x.modelId === m.id); return html`<td class=${r ? 'has' : 'zero'}>${r ? r.pairs : '·'}</td>` })}
           <td class=${p.pairs ? 'has' : 'zero'}>${p.pairs || '·'}</td></tr>`)}</tbody></table></div>
@@ -74,6 +76,7 @@ function Home({ go, membership }) {
     <h2>${t('Bo‘limlar')}</h2>
     <div class="tiles">${TILES.map(([id, ic, label]) => html`<button class="tile" onClick=${() => go(id)}><span class="ti"><${Icon} name=${ic} size=${26} /></span><span>${t(label)}</span></button>`)}</div>
     ${own && html`<${OwnOutput} onClose=${() => setOwn(false)} />`}
+    ${pv && html`<${PhotoView} m=${pv} onClose=${() => setPv(null)} />`}
   <//>`
 }
 

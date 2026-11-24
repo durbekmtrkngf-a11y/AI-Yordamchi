@@ -168,3 +168,11 @@ table.grid-t { border-collapse:separate; border-spacing:0; width:max-content; mi
 .mth.big { width:64px; height:64px; }
 .ownrow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid #e5e7eb; }
 .ownrow input { width:90px; text-align:center; margin:0; }
+
+/* rasm: jadval sarlavhasida kichik, bosilganda katta va 3D */
+.thimg { display:block; width:34px; height:34px; object-fit:cover; border-radius:8px; margin:0 auto 4px; cursor:zoom-in; }
+.pv-box { background:#fff; border-radius:22px; padding:14px; width:min(94vw,440px); max-height:92vh; overflow:auto; box-shadow:0 20px 50px rgba(0,0,0,.4); }
+.pv-h { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.pv-stage { perspective:900px; touch-action:none; display:grid; place-items:center; padding:16px 0; cursor:grab; user-select:none; }
+.pv-card { transition:transform .06s linear; transform-style:preserve-3d; border-radius:16px; box-shadow:0 18px 30px rgba(0,0,0,.35); background:#fff; overflow:hidden; max-width:100%; }
+.pv-card img { display:block; max-width:100%; max-height:56vh; object-fit:contain; pointer-events:none; }
